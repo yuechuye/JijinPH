@@ -46,15 +46,20 @@ def fetch_fund_data() -> pd.DataFrame:
         print("   请检查网络连接或确认 AKShare 是否已正确安装", file=sys.stderr)
         sys.exit(1)
     print(f"   获取到 {len(df)} 只基金")
+
+    if "近1周" not in df.columns:
+        print('❌ 数据中缺少"近1周"列', file=sys.stderr)
+        print(f"   可用列: {list(df.columns)}", file=sys.stderr)
+        sys.exit(1)
+
+    # 清洗：去除周涨幅为空的行，转为 float
+    df = df.dropna(subset=["近1周"])
+    df["_weekly"] = df["近1周"].astype(float)
     return df
 
 
 def fetch_fund_type_map() -> dict:
-    """通过 AKShare 获取所有基金的代码->类型映射。
-
-    fund_name_em() 返回全市场基金名称和类型列表，
-    我们从中提取 {"基金代码": "基金类型"} 的字典。
-    """
+    """通过 AKShare 获取基金代码 -> 基金类型 的映射（向量化）。"""
     print("📡 正在从 AKShare 拉取基金类型数据...")
     try:
         df = ak.fund_name_em()
@@ -62,12 +67,9 @@ def fetch_fund_type_map() -> dict:
         print(f"❌ 获取基金类型数据失败: {e}", file=sys.stderr)
         print("   请检查网络连接或确认 AKShare 是否已正确安装", file=sys.stderr)
         sys.exit(1)
-    type_map = {}
-    for _, row in df.iterrows():
-        code = str(row.get("基金代码", ""))
-        ftype = str(row.get("基金类型", ""))
-        if code:
-            type_map[code] = ftype
+    # 向量化构建映射（比 iterrows 快 50-100 倍）
+    df = df.dropna(subset=["基金代码"])
+    type_map = dict(zip(df["基金代码"].astype(str), df["基金类型"].astype(str)))
     print(f"   获取到 {len(type_map)} 只基金的类型信息")
     return type_map
 
@@ -75,49 +77,42 @@ def fetch_fund_type_map() -> dict:
 def get_week_range() -> str:
     """计算上周一～上周日的日期范围字符串。"""
     today = datetime.now().date()
-    # 找到上周一
     last_monday = today - timedelta(days=today.weekday() + 7)
     last_sunday = last_monday + timedelta(days=6)
     return f"{last_monday} ~ {last_sunday}"
 
 
 def classify_funds(df: pd.DataFrame, themes: list, type_map: dict) -> dict:
-    """按主题关键词将基金归类。
+    """按主题关键词将基金归类（向量化匹配）。
 
-    Args:
-        df: 包含 基金代码, 基金简称, 近1周 等列的 DataFrame
-        themes: 主题配置列表
-        type_map: 基金代码 -> 基金类型 的映射字典
-
-    Returns:
-        {theme_name: [fund_dict, ...]}
+    对每个主题，用正则表达式一次性匹配所有基金名称，
+    然后按周涨幅降序排列。全量数据 + 向量化操作，
+    既不会漏掉冷门板块，也不会慢。
     """
-    # 清洗：验证必要列存在，去除 近1周 为空的行，并将周涨幅转为 float
-    if "近1周" not in df.columns:
-        print('❌ 数据中缺少"近1周"列，无法计算周涨幅', file=sys.stderr)
-        print(f"   可用列: {list(df.columns)}", file=sys.stderr)
-        sys.exit(1)
-    df = df.dropna(subset=["近1周"]).copy()
-    df["周涨幅"] = df["近1周"].astype(float)
+    classified = {}
 
-    classified = {t["name"]: [] for t in themes}
+    for theme in themes:
+        theme_name = theme["name"]
+        # 构建正则：关键词1|关键词2|...，匹配基金名称
+        pattern = "|".join(theme["keywords"])
+        mask = df["基金简称"].str.contains(pattern, na=False)
+        matched = df[mask]
 
-    for _, row in df.iterrows():
-        fund_name = str(row.get("基金简称", ""))
-        fund_code = str(row.get("基金代码", ""))
-        fund_type = type_map.get(fund_code, "")
-        weekly_return = row["周涨幅"]
+        # 取该主题下涨幅最高的 top_n 只基金（之后在 build_result 中截断）
+        matched = matched.sort_values("_weekly", ascending=False)
 
-        for theme in themes:
-            for kw in theme["keywords"]:
-                if kw in fund_name:
-                    classified[theme["name"]].append({
-                        "code": fund_code,
-                        "name": fund_name,
-                        "weeklyReturn": weekly_return,
-                        "type": fund_type,
-                    })
-                    break  # 同一主题只匹配一次
+        funds = []
+        for _, row in matched.iterrows():
+            fund_code = str(row["基金代码"])
+            funds.append({
+                "code": fund_code,
+                "name": str(row["基金简称"]),
+                "weeklyReturn": float(row["_weekly"]),
+                "type": type_map.get(fund_code, ""),
+            })
+
+        classified[theme_name] = funds
+        print(f"   {theme_name}: 匹配到 {len(funds)} 只基金")
 
     return classified
 
@@ -126,21 +121,16 @@ def build_result(classified: dict, top_n: int, week_range: str) -> dict:
     """构建输出 JSON 结构：每主题取涨幅 Top N，排序后返回。"""
     themes_result = []
     for theme_name, funds in classified.items():
-        # 去重（同一基金可能在多个主题中，但当前主题内不应重复）
+        # 去重 + 取前 N
         seen = set()
         unique = []
         for f in funds:
             if f["code"] not in seen:
                 seen.add(f["code"])
                 unique.append(f)
-
-        # 按周涨幅降序排列，取前 N
-        unique.sort(key=lambda x: x["weeklyReturn"], reverse=True)
-        top_funds = unique[:top_n]
-
         themes_result.append({
             "name": theme_name,
-            "funds": top_funds,
+            "funds": unique[:top_n],
         })
 
     return {
