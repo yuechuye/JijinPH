@@ -6,7 +6,7 @@
   const weekSelect = document.getElementById("week-select");
 
   let data = null;
-  let activeThemeIndex = 0;
+  let activeThemeIndex = -1;  // -1 = 总榜, 0..N = 各主题
   let availableWeeks = [];
 
   // ===== Load Week List =====
@@ -57,9 +57,41 @@
     updateTime.textContent = data.updatedAt;
   }
 
+  // ===== Build Combined Ranking (dedup across all themes) =====
+  function buildOverallRanking() {
+    const seen = new Set();
+    const all = [];
+    data.themes.forEach((theme) => {
+      theme.funds.forEach((fund) => {
+        if (!seen.has(fund.code)) {
+          seen.add(fund.code);
+          all.push({ ...fund });
+        }
+      });
+    });
+    all.sort((a, b) => b.weeklyReturn - a.weeklyReturn);
+    return all.slice(0, 10); // 总榜取前10
+  }
+
   // ===== Render Tab Bar =====
   function renderTabs() {
     tabBar.innerHTML = "";
+
+    // 总榜按钮 (index = -1)
+    const overallBtn = document.createElement("button");
+    overallBtn.className = "tab-btn overall-tab";
+    overallBtn.setAttribute("role", "tab");
+    overallBtn.setAttribute("aria-selected", activeThemeIndex === -1 ? "true" : "false");
+    if (activeThemeIndex === -1) overallBtn.classList.add("active");
+    overallBtn.textContent = "🏆 总榜";
+    overallBtn.addEventListener("click", () => {
+      activeThemeIndex = -1;
+      renderTabs();
+      renderFunds();
+    });
+    tabBar.appendChild(overallBtn);
+
+    // 各主题按钮 (index = 0..N)
     data.themes.forEach((theme, index) => {
       const btn = document.createElement("button");
       btn.className = "tab-btn";
@@ -80,20 +112,28 @@
 
   // ===== Render Fund Cards =====
   function renderFunds() {
-    if (activeThemeIndex >= data.themes.length) {
-      activeThemeIndex = 0;
-    }
-    const theme = data.themes[activeThemeIndex];
-    if (!theme || !theme.funds.length) {
-      fundList.innerHTML =
-        '<div class="empty-state">该板块暂无匹配基金</div>';
-      return;
+    let funds;
+
+    if (activeThemeIndex === -1) {
+      // 总榜：合并所有主题，去重，取涨幅前10
+      funds = buildOverallRanking();
+    } else {
+      if (activeThemeIndex >= data.themes.length) {
+        activeThemeIndex = 0;
+      }
+      const theme = data.themes[activeThemeIndex];
+      if (!theme || !theme.funds.length) {
+        fundList.innerHTML =
+          '<div class="empty-state">该板块暂无匹配基金</div>';
+        return;
+      }
+      funds = theme.funds;
     }
 
     const medals = ["gold", "silver", "bronze"];
     const medalEmoji = ["🥇", "🥈", "🥉"];
 
-    fundList.innerHTML = theme.funds
+    fundList.innerHTML = funds
       .map((fund, i) => {
         const medalClass = i < 3 ? medals[i] : "";
         const returnClass = fund.weeklyReturn >= 0 ? "up" : "down";
@@ -111,7 +151,7 @@
             ${rankHtml}
             <div class="fund-info">
               <div class="fund-name">${escapeHtml(fund.name)}</div>
-              <div class="fund-type">${escapeHtml(fund.type)}</div>
+              <div class="fund-meta">${escapeHtml(fund.code)} · ${escapeHtml(fund.type)}</div>
             </div>
             <div class="fund-return ${returnClass}">${sign}${fund.weeklyReturn.toFixed(2)}%</div>
           </div>
