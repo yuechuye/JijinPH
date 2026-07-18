@@ -38,12 +38,11 @@ def load_config():
 
 
 def fetch_fund_data() -> pd.DataFrame:
-    """通过 AKShare 获取全市场开放式基金排行数据（含近1周涨幅）。
+    """通过 AKShare 获取全市场基金排行数据。
 
-    注：东方财富 API 不支持按基金名称搜索，必须拉全量 ~20,000 只基金，
-    然后在本地用向量化匹配筛选。API 单次请求约 4 秒，周末跑一次完全可接受。
+    包含所有类型基金的近1周涨幅，后续会与场内 ETF 列表做匹配。
     """
-    print("📡 正在从东方财富拉取全市场基金排行数据...")
+    print("📡 正在从东方财富拉取基金排行数据...")
     try:
         df = ak.fund_open_fund_rank_em(symbol="全部")
     except Exception as e:
@@ -57,16 +56,68 @@ def fetch_fund_data() -> pd.DataFrame:
         print(f"   可用列: {list(df.columns)}", file=sys.stderr)
         sys.exit(1)
 
-    # 清洗：去除周涨幅为空的行，转为 float
+    # 清洗
     df = df.dropna(subset=["近1周"])
     df["_weekly"] = df["近1周"].astype(float)
-
-    # 只保留 ETF 相关基金（场内 ETF + ETF联接）
-    etf_mask = df["基金简称"].str.contains("ETF", na=False)
-    df = df[etf_mask]
-    print(f"   过滤后保留 {len(df)} 只 ETF 相关基金")
-
     return df
+
+
+def fetch_etf_spot() -> pd.DataFrame:
+    """获取真正的场内 ETF 列表（含代码和名称）。"""
+    print("📡 正在拉取场内 ETF 列表...")
+    try:
+        df = ak.fund_etf_spot_em()
+    except Exception as e:
+        print(f"❌ 获取 ETF 列表失败: {e}", file=sys.stderr)
+        sys.exit(1)
+    # 只保留需要的列
+    df = df[["代码", "名称"]].copy()
+    df.columns = ["etf_code", "etf_name"]
+    print(f"   获取到 {len(df)} 只场内 ETF")
+    return df
+
+
+def match_etf_to_rankings(rank: pd.DataFrame, etf_spot: pd.DataFrame) -> pd.DataFrame:
+    """将场内 ETF 与排行中的 ETF 联接基金做匹配，提取 ETF 代码和名称。
+
+    匹配逻辑：对每只场内 ETF，提取其名称关键词（去掉"ETF"），
+    在排行数据中用向量化 str.contains 找对应的联接基金。
+    """
+    print("🔗 正在匹配场内 ETF 与排行数据...")
+    rows = []
+    matched_codes = set()
+
+    for _, etf in etf_spot.iterrows():
+        name = str(etf["etf_name"])
+        code = str(etf["etf_code"])
+        # 提取关键词：芯片ETF华夏 -> ["芯片", "华夏"]
+        keywords = name.replace("ETF", " ").split()
+        if not keywords:
+            continue
+        # 向量化匹配：排行基金名包含所有关键词
+        mask = rank["基金简称"].str.contains(keywords[0], na=False)
+        for kw in keywords[1:]:
+            mask &= rank["基金简称"].str.contains(kw, na=False)
+        matches = rank[mask]
+        if len(matches) == 0:
+            continue
+
+        # 取匹配到的第一只（通常就是对应的联接基金）
+        fund = matches.iloc[0]
+        fund_code = str(fund["基金代码"])
+        if fund_code not in matched_codes:
+            matched_codes.add(fund_code)
+            rows.append({
+                "code": code,              # ETF 场内代码
+                "name": name,              # ETF 场内名称
+                "fund_code": fund_code,
+                "fund_name": str(fund["基金简称"]),
+                "_weekly": float(fund["_weekly"]),
+            })
+
+    result = pd.DataFrame(rows)
+    print(f"   成功匹配 {len(result)} 只场内 ETF")
+    return result
 
 
 def fetch_fund_type_map() -> dict:
@@ -93,37 +144,36 @@ def get_week_range() -> str:
     return f"{last_monday} ~ {last_sunday}"
 
 
-def classify_funds(df: pd.DataFrame, themes: list, type_map: dict) -> dict:
-    """按主题关键词将基金归类（向量化匹配）。
+def classify_funds(etf_df: pd.DataFrame, themes: list, type_map: dict) -> dict:
+    """按主题关键词将 ETF 基金归类（向量化匹配）。
 
-    对每个主题，用正则表达式一次性匹配所有基金名称，
-    然后按周涨幅降序排列。全量数据 + 向量化操作，
-    既不会漏掉冷门板块，也不会慢。
+    etf_df 来自 match_etf_to_rankings()，每行是一只场内 ETF：
+      code, name, fund_code, fund_name, _weekly
     """
     classified = {}
 
     for theme in themes:
         theme_name = theme["name"]
-        # 构建正则：关键词1|关键词2|...，匹配基金名称
         pattern = "|".join(theme["keywords"])
-        mask = df["基金简称"].str.contains(pattern, na=False)
-        matched = df[mask]
-
-        # 取该主题下涨幅最高的 top_n 只基金（之后在 build_result 中截断）
-        matched = matched.sort_values("_weekly", ascending=False)
+        mask = etf_df["name"].str.contains(pattern, na=False)
+        matched = etf_df[mask].sort_values("_weekly", ascending=False)
 
         funds = []
+        seen = set()
         for _, row in matched.iterrows():
-            fund_code = str(row["基金代码"])
+            code = str(row["code"])
+            if code in seen:
+                continue
+            seen.add(code)
             funds.append({
-                "code": fund_code,
-                "name": str(row["基金简称"]),
+                "code": code,
+                "name": str(row["name"]),
                 "weeklyReturn": float(row["_weekly"]),
-                "type": type_map.get(fund_code, ""),
+                "type": type_map.get(str(row.get("fund_code", "")), ""),
             })
 
         classified[theme_name] = funds
-        print(f"   {theme_name}: 匹配到 {len(funds)} 只基金")
+        print(f"   {theme_name}: 匹配到 {len(funds)} 只场内 ETF")
 
     return classified
 
@@ -239,10 +289,18 @@ def cmd_update():
     week_range = get_week_range()
     print(f"📅 计算周期: {week_range}")
 
-    df = fetch_fund_data()
+    # 1. 拉取排行数据（获取周涨幅）
+    rank = fetch_fund_data()
+    # 2. 拉取场内 ETF 列表
+    etf_spot = fetch_etf_spot()
+    # 3. 匹配：ETF ← ETF联接（获取周涨幅）
+    etf_df = match_etf_to_rankings(rank, etf_spot)
+    # 4. 拉取基金类型
     type_map = fetch_fund_type_map()
+    # 5. 按主题分类
     print("🔍 正在按主题关键词匹配基金...")
-    classified = classify_funds(df, config["themes"], type_map)
+    classified = classify_funds(etf_df, config["themes"], type_map)
+    # 6. 生成结果
     result = build_result(classified, config["topN"], week_range)
     save_data(result)
     print_summary(result)
