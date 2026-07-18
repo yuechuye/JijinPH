@@ -37,8 +37,12 @@ def load_config():
 
 
 def fetch_fund_data() -> pd.DataFrame:
-    """通过 AKShare 获取全市场开放式基金排行数据（含近1周涨幅）。"""
-    print("📡 正在从 AKShare 拉取全市场基金数据...")
+    """通过 AKShare 获取全市场开放式基金排行数据（含近1周涨幅）。
+
+    注：东方财富 API 不支持按基金名称搜索，必须拉全量 ~20,000 只基金，
+    然后在本地用向量化匹配筛选。API 单次请求约 4 秒，周末跑一次完全可接受。
+    """
+    print("📡 正在从东方财富拉取全市场基金排行数据...")
     try:
         df = ak.fund_open_fund_rank_em(symbol="全部")
     except Exception as e:
