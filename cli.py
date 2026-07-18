@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""基金周涨幅榜 CLI — 从 AKShare 拉取数据，生成 JSON 并推送。"""
+"""基金周涨幅榜 CLI — 从 AKShare 拉取数据，生成 JSON 并推送。
+
+数据获取策略（按优先级降级）：
+  1. fund_etf_hist_em(symbol, period="weekly") — ETF 自身周涨幅（最准确）
+  2. fund_open_fund_rank_em 的 近1周 → 匹配 ETF 联接基金（降级方案）
+"""
 
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -18,6 +24,9 @@ DATA_DIR = ROOT / "data"
 WEEKLY_DIR = DATA_DIR / "weekly"
 LATEST_PATH = DATA_DIR / "latest.json"
 MANIFEST_PATH = DATA_DIR / "manifest.json"
+
+# 并发请求数
+MAX_WORKERS = 6
 
 
 def load_config():
@@ -37,103 +46,12 @@ def load_config():
     return config
 
 
-def fetch_fund_data() -> pd.DataFrame:
-    """通过 AKShare 获取全市场基金排行数据。
-
-    包含所有类型基金的近1周涨幅，后续会与场内 ETF 列表做匹配。
-    """
-    print("📡 正在从东方财富拉取基金排行数据...")
-    try:
-        df = ak.fund_open_fund_rank_em(symbol="全部")
-    except Exception as e:
-        print(f"❌ 获取基金排行数据失败: {e}", file=sys.stderr)
-        print("   请检查网络连接或确认 AKShare 是否已正确安装", file=sys.stderr)
-        sys.exit(1)
-    print(f"   获取到 {len(df)} 只基金")
-
-    if "近1周" not in df.columns:
-        print('❌ 数据中缺少"近1周"列', file=sys.stderr)
-        print(f"   可用列: {list(df.columns)}", file=sys.stderr)
-        sys.exit(1)
-
-    # 清洗
-    df = df.dropna(subset=["近1周"])
-    df["_weekly"] = df["近1周"].astype(float)
-    return df
-
-
-def fetch_etf_spot() -> pd.DataFrame:
-    """获取真正的场内 ETF 列表（含代码和名称）。"""
-    print("📡 正在拉取场内 ETF 列表...")
-    try:
-        df = ak.fund_etf_spot_em()
-    except Exception as e:
-        print(f"❌ 获取 ETF 列表失败: {e}", file=sys.stderr)
-        sys.exit(1)
-    # 只保留需要的列
-    df = df[["代码", "名称"]].copy()
-    df.columns = ["etf_code", "etf_name"]
-    print(f"   获取到 {len(df)} 只场内 ETF")
-    return df
-
-
-def match_etf_to_rankings(rank: pd.DataFrame, etf_spot: pd.DataFrame) -> pd.DataFrame:
-    """将场内 ETF 与排行中的 ETF 联接基金做匹配，提取 ETF 代码和名称。
-
-    匹配逻辑：对每只场内 ETF，提取其名称关键词（去掉"ETF"），
-    在排行数据中用向量化 str.contains 找对应的联接基金。
-    """
-    print("🔗 正在匹配场内 ETF 与排行数据...")
-    rows = []
-    matched_codes = set()
-
-    for _, etf in etf_spot.iterrows():
-        name = str(etf["etf_name"])
-        code = str(etf["etf_code"])
-        # 提取关键词：芯片ETF华夏 -> ["芯片", "华夏"]
-        keywords = name.replace("ETF", " ").split()
-        if not keywords:
-            continue
-        # 向量化匹配：排行基金名包含所有关键词
-        mask = rank["基金简称"].str.contains(keywords[0], na=False)
-        for kw in keywords[1:]:
-            mask &= rank["基金简称"].str.contains(kw, na=False)
-        matches = rank[mask]
-        if len(matches) == 0:
-            continue
-
-        # 取匹配到的第一只（通常就是对应的联接基金）
-        fund = matches.iloc[0]
-        fund_code = str(fund["基金代码"])
-        if fund_code not in matched_codes:
-            matched_codes.add(fund_code)
-            rows.append({
-                "code": code,              # ETF 场内代码
-                "name": name,              # ETF 场内名称
-                "fund_code": fund_code,
-                "fund_name": str(fund["基金简称"]),
-                "_weekly": float(fund["_weekly"]),
-            })
-
-    result = pd.DataFrame(rows)
-    print(f"   成功匹配 {len(result)} 只场内 ETF")
-    return result
-
-
-def fetch_fund_type_map() -> dict:
-    """通过 AKShare 获取基金代码 -> 基金类型 的映射（向量化）。"""
-    print("📡 正在从 AKShare 拉取基金类型数据...")
-    try:
-        df = ak.fund_name_em()
-    except Exception as e:
-        print(f"❌ 获取基金类型数据失败: {e}", file=sys.stderr)
-        print("   请检查网络连接或确认 AKShare 是否已正确安装", file=sys.stderr)
-        sys.exit(1)
-    # 向量化构建映射（比 iterrows 快 50-100 倍）
-    df = df.dropna(subset=["基金代码"])
-    type_map = dict(zip(df["基金代码"].astype(str), df["基金类型"].astype(str)))
-    print(f"   获取到 {len(type_map)} 只基金的类型信息")
-    return type_map
+def get_week_dates():
+    """返回上周一和上周五的日期。"""
+    today = datetime.now().date()
+    last_monday = today - timedelta(days=today.weekday() + 7)
+    last_friday = last_monday + timedelta(days=4)
+    return last_monday, last_friday
 
 
 def get_week_range() -> str:
@@ -144,11 +62,158 @@ def get_week_range() -> str:
     return f"{last_monday} ~ {last_sunday}"
 
 
-def classify_funds(etf_df: pd.DataFrame, themes: list, type_map: dict) -> dict:
-    """按主题关键词将 ETF 基金归类（向量化匹配）。
+# ============================================================
+# 数据获取
+# ============================================================
 
-    etf_df 来自 match_etf_to_rankings()，每行是一只场内 ETF：
-      code, name, fund_code, fund_name, _weekly
+
+def fetch_etf_spot() -> pd.DataFrame:
+    """获取真正的场内 ETF 列表（含代码和名称）。"""
+    print("📡 正在拉取场内 ETF 列表...")
+    try:
+        df = ak.fund_etf_spot_em()
+    except Exception as e:
+        print(f"❌ 获取 ETF 列表失败: {e}", file=sys.stderr)
+        sys.exit(1)
+    df = df[["代码", "名称"]].copy()
+    df.columns = ["code", "name"]
+    print(f"   获取到 {len(df)} 只场内 ETF")
+    return df
+
+
+def fetch_one_etf_weekly(code: str, monday: datetime, friday: datetime):
+    """通过 fund_etf_hist_em 获取单只 ETF 上周的周涨幅。
+
+    Returns:
+        {"code": str, "weeklyReturn": float} 或 None（失败时）
+    """
+    try:
+        df = ak.fund_etf_hist_em(
+            symbol=code,
+            period="weekly",
+            start_date=monday.strftime("%Y%m%d"),
+            end_date=friday.strftime("%Y%m%d"),
+            adjust="qfq",
+        )
+        if len(df) == 0:
+            return None
+        row = df.iloc[-1]
+        weekly = float(row["涨跌幅"])
+        return {"code": code, "weeklyReturn": weekly}
+    except Exception:
+        return None
+
+
+def fetch_etf_weekly_bulk(codes: list[str], monday: datetime, friday: datetime) -> dict:
+    """并发获取多只 ETF 的周涨幅。
+
+    Returns:
+        {code: weeklyReturn}
+    """
+    results = {}
+    failed = []
+    total = len(codes)
+
+    print(f"📡 正在并发获取 {total} 只 ETF 的周涨幅（{MAX_WORKERS} 线程）...")
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(fetch_one_etf_weekly, code, monday, friday): code
+            for code in codes
+        }
+        done_count = 0
+        for future in as_completed(futures):
+            code = futures[future]
+            done_count += 1
+            try:
+                r = future.result()
+                if r:
+                    results[r["code"]] = r["weeklyReturn"]
+                else:
+                    failed.append(code)
+            except Exception:
+                failed.append(code)
+            if done_count % 50 == 0 or done_count == total:
+                print(f"   进度: {done_count}/{total} (成功 {len(results)}, 失败 {len(failed)})")
+
+    if failed:
+        print(f"   ⚠️  {len(failed)} 只 ETF 获取失败，将用联接基金数据降级")
+    return results
+
+
+def fetch_fallback_weekly(etf_df: pd.DataFrame) -> pd.DataFrame:
+    """降级方案：通过 fund_open_fund_rank_em + ETF 联接基金匹配获取周涨幅。"""
+    print("📡 降级：从基金排行 + ETF 联接匹配获取周涨幅...")
+    try:
+        rank = ak.fund_open_fund_rank_em(symbol="全部")
+    except Exception as e:
+        print(f"❌ 获取基金排行数据失败: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if "近1周" not in rank.columns:
+        print('❌ 排行数据中缺少"近1周"列', file=sys.stderr)
+        sys.exit(1)
+
+    rank = rank.dropna(subset=["近1周"])
+    rank["_weekly"] = rank["近1周"].astype(float)
+    # 只保留 ETF 相关基金
+    rank = rank[rank["基金简称"].str.contains("ETF", na=False)]
+
+    rows = []
+    matched_codes = set()
+
+    for _, etf in etf_df.iterrows():
+        name = str(etf["name"])
+        code = str(etf["code"])
+        keywords = name.replace("ETF", " ").split()
+        if not keywords:
+            continue
+        mask = rank["基金简称"].str.contains(keywords[0], na=False)
+        for kw in keywords[1:]:
+            mask &= rank["基金简称"].str.contains(kw, na=False)
+        matches = rank[mask]
+        if len(matches) == 0:
+            continue
+
+        fund = matches.iloc[0]
+        fund_code = str(fund["基金代码"])
+        if fund_code not in matched_codes:
+            matched_codes.add(fund_code)
+            rows.append({
+                "code": code,
+                "name": name,
+                "fund_code": fund_code,
+                "fund_name": str(fund["基金简称"]),
+                "_weekly": float(fund["_weekly"]),
+            })
+
+    print(f"   联接基金匹配: {len(rows)} 只")
+    return pd.DataFrame(rows)
+
+
+def fetch_fund_type_map() -> dict:
+    """通过 AKShare 获取基金代码 -> 基金类型 的映射。"""
+    print("📡 正在拉取基金类型数据...")
+    try:
+        df = ak.fund_name_em()
+    except Exception as e:
+        print(f"❌ 获取基金类型数据失败: {e}", file=sys.stderr)
+        sys.exit(1)
+    df = df.dropna(subset=["基金代码"])
+    type_map = dict(zip(df["基金代码"].astype(str), df["基金类型"].astype(str)))
+    print(f"   获取到 {len(type_map)} 只基金的类型信息")
+    return type_map
+
+
+# ============================================================
+# 主题分类
+# ============================================================
+
+
+def classify_etfs(etf_df: pd.DataFrame, themes: list, weekly_map: dict,
+                  type_map: dict) -> dict:
+    """按主题关键词将 ETF 归类。
+
+    weekly_map: {etf_code: weeklyReturn} — 优先使用 ETF 自身周涨幅
     """
     classified = {}
 
@@ -156,7 +221,17 @@ def classify_funds(etf_df: pd.DataFrame, themes: list, type_map: dict) -> dict:
         theme_name = theme["name"]
         pattern = "|".join(theme["keywords"])
         mask = etf_df["name"].str.contains(pattern, na=False)
-        matched = etf_df[mask].sort_values("_weekly", ascending=False)
+        matched = etf_df[mask].copy()
+
+        # 填入周涨幅：优先 ETF 自身数据，其次联接基金数据
+        def get_weekly(row):
+            code = str(row["code"])
+            if code in weekly_map:
+                return weekly_map[code]
+            return float(row.get("_weekly", 0))
+
+        matched["_return"] = matched.apply(get_weekly, axis=1)
+        matched = matched.sort_values("_return", ascending=False)
 
         funds = []
         seen = set()
@@ -168,21 +243,22 @@ def classify_funds(etf_df: pd.DataFrame, themes: list, type_map: dict) -> dict:
             funds.append({
                 "code": code,
                 "name": str(row["name"]),
-                "weeklyReturn": float(row["_weekly"]),
+                "weeklyReturn": float(row["_return"]),
                 "type": type_map.get(str(row.get("fund_code", "")), ""),
+                "source": "etf" if code in weekly_map else "fallback",
             })
 
         classified[theme_name] = funds
-        print(f"   {theme_name}: 匹配到 {len(funds)} 只场内 ETF")
+        etf_count = sum(1 for f in funds if f["source"] == "etf")
+        print(f"   {theme_name}: {len(funds)} 只 (ETF直连:{etf_count})")
 
     return classified
 
 
 def build_result(classified: dict, top_n: int, week_range: str) -> dict:
-    """构建输出 JSON 结构：每主题取涨幅 Top N，排序后返回。"""
+    """构建输出 JSON 结构：每主题取涨幅 Top N。"""
     themes_result = []
     for theme_name, funds in classified.items():
-        # 去重 + 取前 N
         seen = set()
         unique = []
         for f in funds:
@@ -191,7 +267,7 @@ def build_result(classified: dict, top_n: int, week_range: str) -> dict:
                 unique.append(f)
         themes_result.append({
             "name": theme_name,
-            "funds": unique[:top_n],
+            "funds": [{k: v for k, v in f.items() if k != "source"} for f in unique[:top_n]],
         })
 
     return {
@@ -199,6 +275,11 @@ def build_result(classified: dict, top_n: int, week_range: str) -> dict:
         "updatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "themes": themes_result,
     }
+
+
+# ============================================================
+# 数据保存
+# ============================================================
 
 
 def save_data(result: dict):
@@ -219,7 +300,6 @@ def save_data(result: dict):
         f.write(content)
     print(f"💾 已保存: {LATEST_PATH}")
 
-    # 更新周列表索引
     save_manifest()
 
 
@@ -283,24 +363,63 @@ def print_summary(result: dict):
     print(f"\n{'='*50}")
 
 
+# ============================================================
+# 主命令
+# ============================================================
+
+
 def cmd_update():
     """主命令：更新周涨幅数据。"""
     config = load_config()
     week_range = get_week_range()
+    monday, friday = get_week_dates()
     print(f"📅 计算周期: {week_range}")
+    print(f"   交易日: {monday} ~ {friday}")
 
-    # 1. 拉取排行数据（获取周涨幅）
-    rank = fetch_fund_data()
-    # 2. 拉取场内 ETF 列表
-    etf_spot = fetch_etf_spot()
-    # 3. 匹配：ETF ← ETF联接（获取周涨幅）
-    etf_df = match_etf_to_rankings(rank, etf_spot)
-    # 4. 拉取基金类型
+    # 1. 拉取场内 ETF 列表
+    etf_df = fetch_etf_spot()
+
+    # 2. 按主题关键词预筛选，收集需要查询的 ETF 代码
+    print("🔍 按关键词预筛选 ETF...")
+    all_matched_codes = set()
+    for theme in config["themes"]:
+        pattern = "|".join(theme["keywords"])
+        mask = etf_df["name"].str.contains(pattern, na=False)
+        for code in etf_df[mask]["code"]:
+            all_matched_codes.add(str(code))
+    print(f"   共 {len(all_matched_codes)} 只 ETF 匹配主题关键词")
+
+    # 3. 并发获取 ETF 自身周涨幅（主方案）
+    weekly_map = fetch_etf_weekly_bulk(list(all_matched_codes), monday, friday)
+
+    # 4. 对获取失败的 ETF，用联接基金降级
+    if len(weekly_map) < len(all_matched_codes):
+        fallback_df = fetch_fallback_weekly(
+            etf_df[~etf_df["code"].astype(str).isin(weekly_map.keys())]
+        )
+        # 合并：ETF 直连数据优先
+        for _, row in fallback_df.iterrows():
+            code = str(row["code"])
+            if code not in weekly_map:
+                weekly_map[code] = float(row["_weekly"])
+        # 也把联接基金的额外信息合并到 etf_df
+        etf_df = etf_df.merge(
+            fallback_df[["code", "fund_code", "fund_name", "_weekly"]],
+            on="code", how="left",
+        )
+    else:
+        etf_df["fund_code"] = ""
+        etf_df["fund_name"] = ""
+        etf_df["_weekly"] = 0.0
+
+    # 5. 拉取基金类型
     type_map = fetch_fund_type_map()
-    # 5. 按主题分类
-    print("🔍 正在按主题关键词匹配基金...")
-    classified = classify_funds(etf_df, config["themes"], type_map)
-    # 6. 生成结果
+
+    # 6. 按主题分类
+    print("🔍 正在按主题关键词归类...")
+    classified = classify_etfs(etf_df, config["themes"], weekly_map, type_map)
+
+    # 7. 生成结果
     result = build_result(classified, config["topN"], week_range)
     save_data(result)
     print_summary(result)
