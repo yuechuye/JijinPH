@@ -1,6 +1,6 @@
 {
   "week": "2026-07-06 ~ 2026-07-12",
-  "updatedAt": "2026-07-19T02:35:51",
+  "updatedAt": "2026-07-19T02:40:50",
   "themes": [
     {
       "name": "沪深300",
@@ -26,14 +26,14 @@
         {
           "code": "561000",
           "name": "沪深300增强ETF华安",
-          "weeklyReturn": -0.15,
-          "type": ""
+          "weeklyReturn": -3.47,
+          "type": "指数型-股票"
         },
         {
-          "code": "560180",
-          "name": "沪深300ESGETF南方",
-          "weeklyReturn": -0.73,
-          "type": ""
+          "code": "561990",
+          "name": "沪深300增强ETF招商",
+          "weeklyReturn": -4.32,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -41,34 +41,34 @@
       "name": "中证500",
       "funds": [
         {
-          "code": "159982",
-          "name": "中证500ETF鹏华",
-          "weeklyReturn": -2.2,
-          "type": ""
+          "code": "515550",
+          "name": "中证500ETF国联",
+          "weeklyReturn": -10.13,
+          "type": "指数型-股票"
         },
         {
-          "code": "510500",
-          "name": "中证500ETF南方",
-          "weeklyReturn": -2.32,
-          "type": ""
-        },
-        {
-          "code": "159922",
-          "name": "中证500ETF嘉实",
-          "weeklyReturn": -2.4,
-          "type": ""
+          "code": "510550",
+          "name": "中证500ETF方正富邦",
+          "weeklyReturn": -10.68,
+          "type": "指数型-股票"
         },
         {
           "code": "515190",
           "name": "中证500ETF中银证券",
-          "weeklyReturn": -2.51,
-          "type": ""
+          "weeklyReturn": -10.75,
+          "type": "指数型-股票"
         },
         {
-          "code": "510530",
-          "name": "中证500ETF工银",
-          "weeklyReturn": -2.74,
-          "type": ""
+          "code": "159935",
+          "name": "中证500ETF景顺",
+          "weeklyReturn": -10.75,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "510560",
+          "name": "中证500ETF国寿",
+          "weeklyReturn": -10.8,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -76,21 +76,15 @@
       "name": "中证1000",
       "funds": [
         {
-          "code": "560110",
-          "name": "中证1000ETF汇添富",
-          "weeklyReturn": -5.17,
-          "type": ""
-        },
-        {
-          "code": "561590",
-          "name": "中证1000增强ETF华泰柏瑞",
-          "weeklyReturn": -5.65,
-          "type": ""
-        },
-        {
           "code": "159629",
           "name": "中证1000ETF富国",
           "weeklyReturn": -11.79,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "560110",
+          "name": "中证1000ETF汇添富",
+          "weeklyReturn": -11.81,
           "type": "指数型-股票"
         },
         {
@@ -104,6 +98,12 @@
           "name": "中证1000ETF华夏",
           "weeklyReturn": -11.87,
           "type": "指数型-股票"
+        },
+        {
+          "code": "159633",
+          "name": "中证1000ETF易方达",
+          "weeklyReturn": -11.89,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -111,34 +111,34 @@
       "name": "创业板/科创",
       "funds": [
         {
-          "code": "588950",
-          "name": "科创50ETF景顺",
-          "weeklyReturn": 5.16,
-          "type": ""
-        },
-        {
-          "code": "588090",
-          "name": "科创50ETF华泰柏瑞",
-          "weeklyReturn": 4.95,
-          "type": ""
-        },
-        {
-          "code": "159107",
-          "name": "创业板软件ETF富国",
-          "weeklyReturn": 0.89,
-          "type": ""
-        },
-        {
           "code": "159377",
           "name": "创业板医药ETF国泰",
           "weeklyReturn": 0.64,
           "type": "指数型-股票"
         },
         {
-          "code": "159782",
-          "name": "双创50ETF银华",
-          "weeklyReturn": -0.15,
-          "type": ""
+          "code": "159966",
+          "name": "创业板价值ETF华夏",
+          "weeklyReturn": -7.35,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159261",
+          "name": "创业板新能源ETF鹏华",
+          "weeklyReturn": -9.59,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159387",
+          "name": "创业板新能源ETF国泰",
+          "weeklyReturn": -9.62,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159190",
+          "name": "创业板新能源ETF天弘",
+          "weeklyReturn": -9.66,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -158,6 +158,12 @@
           "type": "指数型-股票"
         },
         {
+          "code": "562990",
+          "name": "碳中和ETF易方达",
+          "weeklyReturn": -3.54,
+          "type": "指数型-股票"
+        },
+        {
           "code": "159775",
           "name": "电池ETF建信",
           "weeklyReturn": -5.75,
@@ -168,12 +174,6 @@
           "name": "电池ETF万家",
           "weeklyReturn": -5.76,
           "type": "指数型-股票"
-        },
-        {
-          "code": "159618",
-          "name": "光伏ETF华安",
-          "weeklyReturn": -5.8,
-          "type": ""
         }
       ]
     },
@@ -181,34 +181,34 @@
       "name": "半导体/芯片",
       "funds": [
         {
-          "code": "159516",
-          "name": "半导体设备ETF国泰",
-          "weeklyReturn": 4.62,
-          "type": ""
-        },
-        {
-          "code": "516920",
-          "name": "芯片ETF汇添富",
-          "weeklyReturn": 4.32,
-          "type": ""
-        },
-        {
           "code": "159801",
           "name": "芯片ETF广发",
-          "weeklyReturn": 2.97,
-          "type": ""
+          "weeklyReturn": -18.09,
+          "type": "指数型-股票"
         },
         {
-          "code": "159665",
-          "name": "半导体龙头ETF工银",
-          "weeklyReturn": 2.69,
-          "type": ""
+          "code": "159995",
+          "name": "芯片ETF华夏",
+          "weeklyReturn": -18.17,
+          "type": "指数型-股票"
         },
         {
-          "code": "589210",
-          "name": "科创芯片设计ETF广发",
-          "weeklyReturn": 2.46,
-          "type": ""
+          "code": "159813",
+          "name": "半导体ETF鹏华",
+          "weeklyReturn": -18.38,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "516640",
+          "name": "芯片ETF富国",
+          "weeklyReturn": -18.82,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "512760",
+          "name": "芯片ETF国泰",
+          "weeklyReturn": -18.9,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -222,28 +222,28 @@
           "type": "指数型-股票"
         },
         {
+          "code": "513070",
+          "name": "港股通消费ETF易方达",
+          "weeklyReturn": 3.46,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "513230",
+          "name": "港股通消费ETF华夏",
+          "weeklyReturn": 3.45,
+          "type": "指数型-股票"
+        },
+        {
           "code": "513590",
           "name": "港股通消费ETF鹏华",
           "weeklyReturn": 3.31,
           "type": "指数型-股票"
         },
         {
-          "code": "520620",
-          "name": "恒生消费ETF嘉实",
+          "code": "560680",
+          "name": "消费ETF广发",
           "weeklyReturn": 3.28,
           "type": "指数型-海外股票"
-        },
-        {
-          "code": "159699",
-          "name": "恒生消费ETF广发",
-          "weeklyReturn": 3.28,
-          "type": "指数型-海外股票"
-        },
-        {
-          "code": "159928",
-          "name": "消费ETF汇添富",
-          "weeklyReturn": 3.23,
-          "type": "指数型-股票"
         }
       ]
     },
@@ -251,34 +251,34 @@
       "name": "医疗/医药",
       "funds": [
         {
-          "code": "159169",
-          "name": "恒生生物科技ETF广发",
-          "weeklyReturn": 2.12,
-          "type": ""
-        },
-        {
-          "code": "513060",
-          "name": "恒生医疗ETF博时",
-          "weeklyReturn": 1.71,
-          "type": ""
-        },
-        {
-          "code": "159718",
-          "name": "港股医药ETF平安",
-          "weeklyReturn": 1.47,
-          "type": ""
-        },
-        {
           "code": "159647",
           "name": "中药ETF鹏华",
-          "weeklyReturn": 0.93,
-          "type": ""
+          "weeklyReturn": 6.48,
+          "type": "指数型-股票"
         },
         {
           "code": "560080",
           "name": "中药ETF汇添富",
-          "weeklyReturn": 0.86,
-          "type": ""
+          "weeklyReturn": 6.43,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159760",
+          "name": "医疗健康ETF泰康",
+          "weeklyReturn": 1.07,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159929",
+          "name": "医药ETF汇添富",
+          "weeklyReturn": 0.66,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "560260",
+          "name": "医疗ETF广发",
+          "weeklyReturn": 0.64,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -286,34 +286,34 @@
       "name": "科技/AI",
       "funds": [
         {
+          "code": "520630",
+          "name": "港股通互联网ETF广发",
+          "weeklyReturn": 0.77,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "520790",
+          "name": "港股通互联网ETF兴业",
+          "weeklyReturn": 0.43,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159688",
+          "name": "恒生互联网ETF华安",
+          "weeklyReturn": 0.25,
+          "type": "指数型-海外股票"
+        },
+        {
+          "code": "513330",
+          "name": "恒生互联网ETF华夏",
+          "weeklyReturn": 0.23,
+          "type": "指数型-海外股票"
+        },
+        {
           "code": "159792",
           "name": "港股通互联网ETF富国",
-          "weeklyReturn": 8.74,
-          "type": ""
-        },
-        {
-          "code": "520910",
-          "name": "港股通互联网ETF华夏",
-          "weeklyReturn": 8.61,
-          "type": ""
-        },
-        {
-          "code": "515400",
-          "name": "大数据ETF富国",
-          "weeklyReturn": 8.45,
-          "type": ""
-        },
-        {
-          "code": "520650",
-          "name": "港股通互联网ETF南方",
-          "weeklyReturn": 8.39,
-          "type": ""
-        },
-        {
-          "code": "513050",
-          "name": "中概互联网ETF易方达",
-          "weeklyReturn": 8.23,
-          "type": ""
+          "weeklyReturn": 0.16,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -321,46 +321,40 @@
       "name": "军工",
       "funds": [
         {
-          "code": "159283",
-          "name": "通用航空ETF南方",
-          "weeklyReturn": 2.22,
-          "type": ""
+          "code": "159257",
+          "name": "航空ETF汇添富",
+          "weeklyReturn": -14.04,
+          "type": "指数型-股票"
         },
         {
-          "code": "563320",
-          "name": "通用航空ETF华泰柏瑞",
-          "weeklyReturn": 1.03,
-          "type": ""
+          "code": "159231",
+          "name": "通用航空ETF华宝",
+          "weeklyReturn": -14.08,
+          "type": "指数型-股票"
         },
         {
-          "code": "159208",
-          "name": "航空航天ETF万家",
-          "weeklyReturn": -0.5,
-          "type": ""
+          "code": "159230",
+          "name": "通用航空ETF华夏",
+          "weeklyReturn": -14.16,
+          "type": "指数型-股票"
         },
         {
-          "code": "512710",
-          "name": "军工龙头ETF富国",
-          "weeklyReturn": -1.01,
-          "type": ""
+          "code": "159378",
+          "name": "通用航空ETF永赢",
+          "weeklyReturn": -14.16,
+          "type": "指数型-股票"
         },
         {
-          "code": "512560",
-          "name": "军工ETF易方达",
-          "weeklyReturn": -1.84,
-          "type": ""
+          "code": "159392",
+          "name": "航空ETF富国",
+          "weeklyReturn": -14.19,
+          "type": "指数型-股票"
         }
       ]
     },
     {
       "name": "金融",
       "funds": [
-        {
-          "code": "513190",
-          "name": "港股通金融ETF华夏",
-          "weeklyReturn": 3.01,
-          "type": ""
-        },
         {
           "code": "515290",
           "name": "银行ETF天弘",
@@ -374,14 +368,20 @@
           "type": "指数型-股票"
         },
         {
-          "code": "512800",
-          "name": "银行ETF华宝",
-          "weeklyReturn": 2.94,
+          "code": "515020",
+          "name": "银行ETF华夏",
+          "weeklyReturn": 2.95,
           "type": "指数型-股票"
         },
         {
           "code": "512700",
           "name": "银行ETF南方",
+          "weeklyReturn": 2.94,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "512820",
+          "name": "银行ETF汇添富",
           "weeklyReturn": 2.94,
           "type": "指数型-股票"
         }
@@ -461,12 +461,6 @@
       "name": "机器人/自动化",
       "funds": [
         {
-          "code": "560770",
-          "name": "机器人ETF招商",
-          "weeklyReturn": -8.2,
-          "type": ""
-        },
-        {
           "code": "562360",
           "name": "机器人ETF银华",
           "weeklyReturn": -11.67,
@@ -489,24 +483,18 @@
           "name": "机器人ETF嘉实",
           "weeklyReturn": -11.93,
           "type": "指数型-股票"
+        },
+        {
+          "code": "560770",
+          "name": "机器人ETF招商",
+          "weeklyReturn": -11.94,
+          "type": "指数型-股票"
         }
       ]
     },
     {
       "name": "传媒/游戏",
       "funds": [
-        {
-          "code": "516770",
-          "name": "游戏ETF华泰柏瑞",
-          "weeklyReturn": 3.23,
-          "type": ""
-        },
-        {
-          "code": "159805",
-          "name": "传媒ETF鹏华",
-          "weeklyReturn": 2.9,
-          "type": ""
-        },
         {
           "code": "159869",
           "name": "游戏ETF华夏",
@@ -531,34 +519,34 @@
       "name": "汽车/智能车",
       "funds": [
         {
-          "code": "159028",
-          "name": "港股汽车ETF天弘",
-          "weeklyReturn": -0.13,
-          "type": ""
-        },
-        {
-          "code": "159210",
-          "name": "港股通汽车ETF汇添富",
-          "weeklyReturn": -0.58,
-          "type": ""
-        },
-        {
           "code": "159121",
           "name": "港股通汽车ETF易方达",
           "weeklyReturn": -0.68,
           "type": "指数型-股票"
         },
         {
-          "code": "520680",
-          "name": "港股通汽车ETF南方",
-          "weeklyReturn": -0.71,
-          "type": ""
-        },
-        {
           "code": "159239",
           "name": "港股通汽车ETF富国",
-          "weeklyReturn": -0.88,
-          "type": ""
+          "weeklyReturn": -0.71,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "516840",
+          "name": "汽车ETF南方",
+          "weeklyReturn": -1.31,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "520680",
+          "name": "港股通汽车ETF南方",
+          "weeklyReturn": -1.31,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159323",
+          "name": "港股通汽车ETF华夏",
+          "weeklyReturn": -1.33,
+          "type": "指数型-股票"
         }
       ]
     },
@@ -572,27 +560,27 @@
           "type": "指数型-其他"
         },
         {
-          "code": "518660",
-          "name": "黄金ETF工银",
-          "weeklyReturn": -1.38,
-          "type": ""
+          "code": "518850",
+          "name": "黄金ETF华夏",
+          "weeklyReturn": -2.79,
+          "type": "指数型-其他"
         },
         {
-          "code": "159934",
-          "name": "黄金ETF易方达",
-          "weeklyReturn": -1.45,
-          "type": ""
+          "code": "159937",
+          "name": "黄金ETF博时",
+          "weeklyReturn": -2.79,
+          "type": "指数型-其他"
+        },
+        {
+          "code": "518660",
+          "name": "黄金ETF工银",
+          "weeklyReturn": -2.79,
+          "type": "指数型-其他"
         },
         {
           "code": "159812",
           "name": "黄金ETF前海开源",
-          "weeklyReturn": -1.48,
-          "type": ""
-        },
-        {
-          "code": "518850",
-          "name": "黄金ETF华夏",
-          "weeklyReturn": -2.79,
+          "weeklyReturn": -2.8,
           "type": "指数型-其他"
         }
       ]
@@ -600,24 +588,6 @@
     {
       "name": "通信/5G",
       "funds": [
-        {
-          "code": "520710",
-          "name": "港股通信息技术ETF广发",
-          "weeklyReturn": 0.82,
-          "type": ""
-        },
-        {
-          "code": "159198",
-          "name": "港股通信息技术ETF富国",
-          "weeklyReturn": 0.82,
-          "type": ""
-        },
-        {
-          "code": "520750",
-          "name": "港股通信息ETF华富",
-          "weeklyReturn": -1.61,
-          "type": ""
-        },
         {
           "code": "159131",
           "name": "港股通信息技术ETF华宝",
@@ -628,6 +598,24 @@
           "code": "159511",
           "name": "通信ETF南方",
           "weeklyReturn": -11.43,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159994",
+          "name": "通信ETF银华",
+          "weeklyReturn": -12.58,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "515050",
+          "name": "通信ETF华夏",
+          "weeklyReturn": -12.74,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "159695",
+          "name": "通信ETF嘉实",
+          "weeklyReturn": -14.44,
           "type": "指数型-股票"
         }
       ]
@@ -642,15 +630,15 @@
           "type": "指数型-股票"
         },
         {
-          "code": "159301",
-          "name": "公用事业ETF华夏",
-          "weeklyReturn": 0.88,
+          "code": "560620",
+          "name": "公用事业ETF万家",
+          "weeklyReturn": 0.91,
           "type": "指数型-股票"
         },
         {
-          "code": "159611",
-          "name": "电力ETF广发",
-          "weeklyReturn": 0.86,
+          "code": "159301",
+          "name": "公用事业ETF华夏",
+          "weeklyReturn": 0.88,
           "type": "指数型-股票"
         },
         {
@@ -660,9 +648,9 @@
           "type": "指数型-股票"
         },
         {
-          "code": "561170",
-          "name": "绿色电力ETF富国",
-          "weeklyReturn": 0.85,
+          "code": "159611",
+          "name": "电力ETF广发",
+          "weeklyReturn": 0.86,
           "type": "指数型-股票"
         }
       ]
@@ -677,6 +665,18 @@
           "type": "指数型-股票"
         },
         {
+          "code": "159870",
+          "name": "化工ETF鹏华",
+          "weeklyReturn": -5.34,
+          "type": "指数型-股票"
+        },
+        {
+          "code": "516020",
+          "name": "化工ETF华宝",
+          "weeklyReturn": -5.38,
+          "type": "指数型-股票"
+        },
+        {
           "code": "159129",
           "name": "化工ETF嘉实",
           "weeklyReturn": -5.38,
@@ -687,18 +687,6 @@
           "name": "化工ETF天弘",
           "weeklyReturn": -5.43,
           "type": "指数型-股票"
-        },
-        {
-          "code": "516120",
-          "name": "化工ETF富国",
-          "weeklyReturn": -5.51,
-          "type": "指数型-股票"
-        },
-        {
-          "code": "516360",
-          "name": "新材料ETF华宝",
-          "weeklyReturn": -7.95,
-          "type": ""
         }
       ]
     },
@@ -706,34 +694,34 @@
       "name": "港股/恒生",
       "funds": [
         {
-          "code": "159792",
-          "name": "港股通互联网ETF富国",
-          "weeklyReturn": 8.74,
-          "type": ""
+          "code": "513070",
+          "name": "港股通消费ETF易方达",
+          "weeklyReturn": 3.46,
+          "type": "指数型-股票"
         },
         {
-          "code": "520910",
-          "name": "港股通互联网ETF华夏",
-          "weeklyReturn": 8.61,
-          "type": ""
+          "code": "513230",
+          "name": "港股通消费ETF华夏",
+          "weeklyReturn": 3.45,
+          "type": "指数型-股票"
         },
         {
-          "code": "520650",
-          "name": "港股通互联网ETF南方",
-          "weeklyReturn": 8.39,
-          "type": ""
+          "code": "513590",
+          "name": "港股通消费ETF鹏华",
+          "weeklyReturn": 3.31,
+          "type": "指数型-股票"
         },
         {
-          "code": "513720",
-          "name": "港股互联网ETF国泰",
-          "weeklyReturn": 8.16,
-          "type": ""
+          "code": "159699",
+          "name": "恒生消费ETF广发",
+          "weeklyReturn": 3.28,
+          "type": "指数型-海外股票"
         },
         {
-          "code": "159135",
-          "name": "港股通科技ETF前海开源",
-          "weeklyReturn": 7.71,
-          "type": ""
+          "code": "520620",
+          "name": "恒生消费ETF嘉实",
+          "weeklyReturn": 3.28,
+          "type": "指数型-海外股票"
         }
       ]
     },
@@ -741,33 +729,21 @@
       "name": "海外/跨境",
       "funds": [
         {
-          "code": "513050",
-          "name": "中概互联网ETF易方达",
-          "weeklyReturn": 8.23,
-          "type": ""
-        },
-        {
-          "code": "513500",
-          "name": "标普500ETF博时",
-          "weeklyReturn": 0.96,
-          "type": ""
+          "code": "159659",
+          "name": "纳斯达克100ETF招商",
+          "weeklyReturn": -2.4,
+          "type": "指数型-海外股票"
         },
         {
           "code": "159513",
           "name": "纳斯达克100ETF大成",
-          "weeklyReturn": 0.17,
-          "type": ""
+          "weeklyReturn": -2.52,
+          "type": "指数型-海外股票"
         },
         {
           "code": "159632",
           "name": "纳斯达克ETF华安",
-          "weeklyReturn": -0.17,
-          "type": ""
-        },
-        {
-          "code": "159659",
-          "name": "纳斯达克100ETF招商",
-          "weeklyReturn": -2.4,
+          "weeklyReturn": -2.61,
           "type": "指数型-海外股票"
         }
       ]
@@ -776,34 +752,34 @@
       "name": "恒生科技/中概",
       "funds": [
         {
-          "code": "513050",
-          "name": "中概互联网ETF易方达",
-          "weeklyReturn": 8.23,
-          "type": ""
+          "code": "159688",
+          "name": "恒生互联网ETF华安",
+          "weeklyReturn": 0.25,
+          "type": "指数型-海外股票"
         },
         {
-          "code": "513180",
-          "name": "恒生科技ETF华夏",
-          "weeklyReturn": 6.32,
-          "type": ""
+          "code": "513330",
+          "name": "恒生互联网ETF华夏",
+          "weeklyReturn": 0.23,
+          "type": "指数型-海外股票"
         },
         {
-          "code": "513130",
-          "name": "恒生科技ETF华泰柏瑞",
-          "weeklyReturn": 6.04,
-          "type": ""
+          "code": "159202",
+          "name": "恒生互联网ETF万家",
+          "weeklyReturn": -0.44,
+          "type": "指数型-海外股票"
         },
         {
-          "code": "520920",
-          "name": "恒生科技ETF天弘",
-          "weeklyReturn": 5.99,
-          "type": ""
+          "code": "159128",
+          "name": "港股科技ETF天弘",
+          "weeklyReturn": -0.79,
+          "type": "指数型-股票"
         },
         {
-          "code": "520570",
-          "name": "恒生科技ETF南方",
-          "weeklyReturn": 5.82,
-          "type": ""
+          "code": "513890",
+          "name": "恒生科技ETF摩根",
+          "weeklyReturn": -1.95,
+          "type": "指数型-海外股票"
         }
       ]
     },
