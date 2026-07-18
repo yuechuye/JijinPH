@@ -13,6 +13,9 @@
       const resp = await fetch("data/latest.json");
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       data = await resp.json();
+      if (!data || !data.themes || !data.week) {
+        throw new Error("数据格式错误");
+      }
       return true;
     } catch (err) {
       console.error("加载数据失败:", err);
@@ -35,6 +38,8 @@
     data.themes.forEach((theme, index) => {
       const btn = document.createElement("button");
       btn.className = "tab-btn";
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", index === activeThemeIndex ? "true" : "false");
       if (index === activeThemeIndex) btn.classList.add("active");
       btn.textContent = theme.name;
       btn.addEventListener("click", () => {
@@ -44,10 +49,15 @@
       });
       tabBar.appendChild(btn);
     });
+    fundList.setAttribute("role", "tabpanel");
+    fundList.setAttribute("aria-label", "基金列表");
   }
 
   // ===== Render Fund Cards =====
   function renderFunds() {
+    if (activeThemeIndex >= data.themes.length) {
+      activeThemeIndex = 0;
+    }
     const theme = data.themes[activeThemeIndex];
     if (!theme || !theme.funds.length) {
       fundList.innerHTML =
@@ -61,16 +71,12 @@
     fundList.innerHTML = theme.funds
       .map((fund, i) => {
         const medalClass = i < 3 ? medals[i] : "";
-        const rankDisplay =
-          i < 3
-            ? medalEmoji[i]
-            : `<span class="fund-rank">${i + 1}</span>`;
         const returnClass = fund.weeklyReturn >= 0 ? "up" : "down";
         const sign = fund.weeklyReturn >= 0 ? "+" : "";
 
         let rankHtml;
         if (i < 3) {
-          rankHtml = `<div class="fund-rank ${medalClass}">${rankDisplay}</div>`;
+          rankHtml = `<div class="fund-rank ${medalClass}">${medalEmoji[i]}</div>`;
         } else {
           rankHtml = `<div class="fund-rank">${i + 1}</div>`;
         }
