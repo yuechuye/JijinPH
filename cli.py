@@ -34,6 +34,24 @@ def fetch_fund_data() -> pd.DataFrame:
     return df
 
 
+def fetch_fund_type_map() -> dict:
+    """通过 AKShare 获取所有基金的代码->类型映射。
+
+    fund_name_em() 返回全市场基金名称和类型列表，
+    我们从中提取 {"基金代码": "基金类型"} 的字典。
+    """
+    print("📡 正在从 AKShare 拉取基金类型数据...")
+    df = ak.fund_name_em()
+    type_map = {}
+    for _, row in df.iterrows():
+        code = str(row.get("基金代码", ""))
+        ftype = str(row.get("基金类型", ""))
+        if code:
+            type_map[code] = ftype
+    print(f"   获取到 {len(type_map)} 只基金的类型信息")
+    return type_map
+
+
 def get_week_range() -> str:
     """计算上周一～上周日的日期范围字符串。"""
     today = datetime.now().date()
@@ -43,12 +61,13 @@ def get_week_range() -> str:
     return f"{last_monday} ~ {last_sunday}"
 
 
-def classify_funds(df: pd.DataFrame, themes: list) -> dict:
+def classify_funds(df: pd.DataFrame, themes: list, type_map: dict) -> dict:
     """按主题关键词将基金归类。
 
     Args:
         df: 包含 基金代码, 基金简称, 近1周 等列的 DataFrame
         themes: 主题配置列表
+        type_map: 基金代码 -> 基金类型 的映射字典
 
     Returns:
         {theme_name: [fund_dict, ...]}
@@ -62,7 +81,7 @@ def classify_funds(df: pd.DataFrame, themes: list) -> dict:
     for _, row in df.iterrows():
         fund_name = str(row.get("基金简称", ""))
         fund_code = str(row.get("基金代码", ""))
-        fund_type = str(row.get("基金类型", ""))
+        fund_type = type_map.get(fund_code, "")
         weekly_return = float(row["周涨幅"])
 
         for theme in themes:
@@ -168,8 +187,9 @@ def cmd_update():
     print(f"📅 计算周期: {week_range}")
 
     df = fetch_fund_data()
+    type_map = fetch_fund_type_map()
     print("🔍 正在按主题关键词匹配基金...")
-    classified = classify_funds(df, config["themes"])
+    classified = classify_funds(df, config["themes"], type_map)
     result = build_result(classified, config["topN"], week_range)
     save_data(result)
     print_summary(result)
