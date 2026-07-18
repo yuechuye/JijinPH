@@ -21,15 +21,30 @@ LATEST_PATH = DATA_DIR / "latest.json"
 
 def load_config():
     """加载主题配置文件。"""
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    if not CONFIG_PATH.exists():
+        print(f"❌ 配置文件不存在: {CONFIG_PATH}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        print(f"❌ 配置文件解析失败: {e}", file=sys.stderr)
+        sys.exit(1)
+    if config is None:
+        print(f"❌ 配置文件为空: {CONFIG_PATH}", file=sys.stderr)
+        sys.exit(1)
     return config
 
 
 def fetch_fund_data() -> pd.DataFrame:
     """通过 AKShare 获取全市场开放式基金排行数据（含近1周涨幅）。"""
     print("📡 正在从 AKShare 拉取全市场基金数据...")
-    df = ak.fund_open_fund_rank_em(symbol="全部")
+    try:
+        df = ak.fund_open_fund_rank_em(symbol="全部")
+    except Exception as e:
+        print(f"❌ 获取基金排行数据失败: {e}", file=sys.stderr)
+        print("   请检查网络连接或确认 AKShare 是否已正确安装", file=sys.stderr)
+        sys.exit(1)
     print(f"   获取到 {len(df)} 只基金")
     return df
 
@@ -41,7 +56,12 @@ def fetch_fund_type_map() -> dict:
     我们从中提取 {"基金代码": "基金类型"} 的字典。
     """
     print("📡 正在从 AKShare 拉取基金类型数据...")
-    df = ak.fund_name_em()
+    try:
+        df = ak.fund_name_em()
+    except Exception as e:
+        print(f"❌ 获取基金类型数据失败: {e}", file=sys.stderr)
+        print("   请检查网络连接或确认 AKShare 是否已正确安装", file=sys.stderr)
+        sys.exit(1)
     type_map = {}
     for _, row in df.iterrows():
         code = str(row.get("基金代码", ""))
@@ -72,7 +92,11 @@ def classify_funds(df: pd.DataFrame, themes: list, type_map: dict) -> dict:
     Returns:
         {theme_name: [fund_dict, ...]}
     """
-    # 清洗：去除 近1周 为空的行，并将周涨幅转为 float
+    # 清洗：验证必要列存在，去除 近1周 为空的行，并将周涨幅转为 float
+    if "近1周" not in df.columns:
+        print('❌ 数据中缺少"近1周"列，无法计算周涨幅', file=sys.stderr)
+        print(f"   可用列: {list(df.columns)}", file=sys.stderr)
+        sys.exit(1)
     df = df.dropna(subset=["近1周"]).copy()
     df["周涨幅"] = df["近1周"].astype(float)
 
@@ -82,7 +106,7 @@ def classify_funds(df: pd.DataFrame, themes: list, type_map: dict) -> dict:
         fund_name = str(row.get("基金简称", ""))
         fund_code = str(row.get("基金代码", ""))
         fund_type = type_map.get(fund_code, "")
-        weekly_return = float(row["周涨幅"])
+        weekly_return = row["周涨幅"]
 
         for theme in themes:
             for kw in theme["keywords"]:
@@ -149,7 +173,11 @@ def git_commit_and_push():
     """提交并推送到 GitHub。"""
     try:
         subprocess.run(["git", "add", "data/"], check=True, cwd=ROOT)
-        week_file = sorted(WEEKLY_DIR.glob("*.json"))[-1]
+        json_files = sorted(WEEKLY_DIR.glob("*.json"))
+        if not json_files:
+            print("⚠️  没有找到周数据文件，跳过 commit", file=sys.stderr)
+            return
+        week_file = json_files[-1]
         subprocess.run(
             ["git", "commit", "-m", f"data: update fund weekly rank {week_file.stem}"],
             check=True, cwd=ROOT,
