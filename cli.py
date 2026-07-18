@@ -17,6 +17,7 @@ CONFIG_PATH = ROOT / "config" / "themes.yaml"
 DATA_DIR = ROOT / "data"
 WEEKLY_DIR = DATA_DIR / "weekly"
 LATEST_PATH = DATA_DIR / "latest.json"
+MANIFEST_PATH = DATA_DIR / "manifest.json"
 
 
 def load_config():
@@ -59,6 +60,12 @@ def fetch_fund_data() -> pd.DataFrame:
     # 清洗：去除周涨幅为空的行，转为 float
     df = df.dropna(subset=["近1周"])
     df["_weekly"] = df["近1周"].astype(float)
+
+    # 只保留 ETF 相关基金（场内 ETF + ETF联接）
+    etf_mask = df["基金简称"].str.contains("ETF", na=False)
+    df = df[etf_mask]
+    print(f"   过滤后保留 {len(df)} 只 ETF 相关基金")
+
     return df
 
 
@@ -161,6 +168,30 @@ def save_data(result: dict):
     with open(LATEST_PATH, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"💾 已保存: {LATEST_PATH}")
+
+    # 更新周列表索引
+    save_manifest()
+
+
+def save_manifest():
+    """扫描 data/weekly/ 目录，生成 manifest.json 列出所有可用周。"""
+    weeks = []
+    for f in sorted(WEEKLY_DIR.glob("*.json")):
+        try:
+            with open(f, "r", encoding="utf-8") as fp:
+                d = json.load(fp)
+                weeks.append({
+                    "file": f.name,
+                    "week": d.get("week", f.stem),
+                    "updatedAt": d.get("updatedAt", ""),
+                })
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    manifest = {"weeks": weeks}
+    with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    print(f"📋 已更新周索引: {len(weeks)} 周")
 
 
 def git_commit_and_push():

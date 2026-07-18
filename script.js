@@ -3,14 +3,39 @@
   const fundList = document.getElementById("fund-list");
   const weekRange = document.getElementById("week-range");
   const updateTime = document.getElementById("update-time");
+  const weekSelect = document.getElementById("week-select");
 
   let data = null;
   let activeThemeIndex = 0;
+  let availableWeeks = [];
+
+  // ===== Load Week List =====
+  async function loadManifest() {
+    try {
+      const resp = await fetch("data/manifest.json");
+      if (!resp.ok) return;
+      const manifest = await resp.json();
+      availableWeeks = manifest.weeks || [];
+      // 填充下拉框
+      weekSelect.innerHTML = '<option value="latest">📅 最新一周</option>';
+      availableWeeks.forEach((w, i) => {
+        const selected = i === availableWeeks.length - 1 ? " selected" : "";
+        weekSelect.innerHTML += `<option value="${w.file}">${w.week}</option>`;
+      });
+      // 默认选最新
+      if (availableWeeks.length > 0) {
+        weekSelect.value = "latest";
+      }
+    } catch (err) {
+      console.warn("加载周列表失败，仅支持最新数据:", err);
+    }
+  }
 
   // ===== Fetch Data =====
-  async function loadData() {
+  async function loadData(source) {
+    const url = source === "latest" ? "data/latest.json" : `data/weekly/${source}`;
     try {
-      const resp = await fetch("data/latest.json");
+      const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       data = await resp.json();
       if (!data || !data.themes || !data.week) {
@@ -41,7 +66,7 @@
       btn.setAttribute("role", "tab");
       btn.setAttribute("aria-selected", index === activeThemeIndex ? "true" : "false");
       if (index === activeThemeIndex) btn.classList.add("active");
-      btn.textContent = theme.name;
+      btn.textContent = `${theme.name} (${theme.funds.length})`;
       btn.addEventListener("click", () => {
         activeThemeIndex = index;
         renderTabs();
@@ -96,13 +121,27 @@
   }
 
   function escapeHtml(str) {
+    if (!str) return "";
     const div = document.createElement("div");
     div.textContent = str;
     return div.innerHTML;
   }
 
+  // ===== Week Selector Handler =====
+  weekSelect.addEventListener("change", async () => {
+    const source = weekSelect.value;
+    activeThemeIndex = 0;
+    fundList.innerHTML = '<div class="loading">加载中...</div>';
+    const ok = await loadData(source);
+    if (!ok) return;
+    renderHeader();
+    renderTabs();
+    renderFunds();
+  });
+
   // ===== Run =====
-  const ok = await loadData();
+  await loadManifest();
+  const ok = await loadData("latest");
   if (!ok) return;
 
   renderHeader();

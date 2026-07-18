@@ -42,6 +42,22 @@ body {
   font-weight: 700;
   color: var(--text);
 }
+.week-selector {
+  margin-top: 12px;
+}
+.week-select {
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: var(--card-bg);
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+.week-select:focus {
+  border-color: var(--accent);
+}
 .week-range {
   margin-top: 6px;
   font-size: 14px;
