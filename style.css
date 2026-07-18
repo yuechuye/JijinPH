@@ -1,0 +1,175 @@
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f5f5;
+  --card-bg: #ffffff;
+  --text: #333333;
+  --text-secondary: #888888;
+  --up: #e53e3e;
+  --down: #38a169;
+  --accent: #3182ce;
+  --accent-light: #ebf8ff;
+  --gold: #d69e2e;
+  --silver: #a0aec0;
+  --bronze: #c05621;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ===== Container ===== */
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+
+/* ===== Header ===== */
+.header {
+  text-align: center;
+  padding: 32px 0 20px;
+}
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+}
+.week-range {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ===== Tab Bar ===== */
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.tab-btn {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  user-select: none;
+}
+.tab-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tab-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* ===== Fund List ===== */
+.fund-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 200px;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 60px 20px;
+  font-size: 16px;
+}
+
+/* ===== Fund Card ===== */
+.fund-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: transform 0.15s;
+}
+.fund-card:hover { transform: translateY(-1px); }
+
+.fund-rank {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #edf2f7;
+  color: var(--text-secondary);
+}
+.fund-rank.gold   { background: #fefcbf; color: #975a16; }
+.fund-rank.silver { background: #e2e8f0; color: #4a5568; }
+.fund-rank.bronze { background: #fed7d7; color: #7b341e; }
+
+.fund-info {
+  flex: 1;
+  min-width: 0;
+}
+.fund-name {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fund-type {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.fund-return {
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-align: right;
+}
+.fund-return.up   { color: var(--up); }
+.fund-return.down { color: var(--down); }
+
+/* ===== Empty State ===== */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* ===== Footer ===== */
+.footer {
+  text-align: center;
+  padding: 24px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 480px) {
+  .container { padding: 12px 10px; }
+  .header h1 { font-size: 22px; }
+  .fund-card { padding: 12px 14px; gap: 8px; }
+  .fund-return { font-size: 16px; }
+}
