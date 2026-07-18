@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """基金周涨幅榜 CLI — 场内 ETF 周涨幅排行。
 
-数据来源：东方财富基金排行 (fund.eastmoney.com)，通过 AKShare 获取。
-周涨幅基于基金净值计算（非交易价格），每只场内 ETF 通过
-联接基金匹配获取对应周涨幅（跟踪误差 < 0.2%）。
+数据来源：东方财富 K 线 API (push2his.eastmoney.com)，
+直接获取每只 ETF 的前复权周涨幅，不使用联接基金。
 """
 
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import requests
 import yaml
 import akshare as ak
 import pandas as pd
@@ -23,6 +24,9 @@ DATA_DIR = ROOT / "data"
 WEEKLY_DIR = DATA_DIR / "weekly"
 LATEST_PATH = DATA_DIR / "latest.json"
 MANIFEST_PATH = DATA_DIR / "manifest.json"
+
+KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+REQUEST_DELAY = 0.3  # 请求间隔，避免被限流
 
 
 def load_config():
@@ -56,7 +60,7 @@ def get_week_range() -> str:
 
 
 def fetch_etf_spot() -> pd.DataFrame:
-    """获取真正的场内 ETF 列表（含交易所代码和名称）。"""
+    """获取场内 ETF 列表。"""
     print("📡 正在拉取场内 ETF 列表...")
     try:
         df = ak.fund_etf_spot_em()
@@ -69,72 +73,76 @@ def fetch_etf_spot() -> pd.DataFrame:
     return df
 
 
-def fetch_fund_ranking() -> pd.DataFrame:
-    """获取全市场基金排行（含近1周涨幅）。
+def get_secid(code: str) -> str:
+    """ETF 代码 → 东方财富 secid。
 
-    数据来源：fund.eastmoney.com，近1周基于净值计算。
+    上交所 (51xxxx, 56xxxx, 58xxxx...) → 1.{code}
+    深交所 (15xxxx, 16xxxx...)       → 0.{code}
     """
-    print("📡 正在拉取基金周涨幅排行...")
+    if code.startswith("5"):
+        return f"1.{code}"
+    else:
+        return f"0.{code}"
+
+
+def fetch_one_etf_weekly(code: str, monday: str, friday: str, session: requests.Session):
+    """获取单只 ETF 上周周涨幅（前复权）。"""
+    params = {
+        "fields1": "f1,f2,f3,f4,f5,f6",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+        "ut": "7eea3edcaed734bea9cbfc24409ed989",
+        "klt": "102",       # 周线
+        "fqt": "1",         # 前复权
+        "beg": monday,
+        "end": friday,
+        "secid": get_secid(code),
+    }
     try:
-        df = ak.fund_open_fund_rank_em(symbol="全部")
-    except Exception as e:
-        print(f"❌ 获取基金排行失败: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    if "近1周" not in df.columns:
-        print('❌ 排行数据中缺少"近1周"列', file=sys.stderr)
-        sys.exit(1)
-
-    df = df.dropna(subset=["近1周"])
-    df["_weekly"] = df["近1周"].astype(float)
-    # 只保留 ETF 相关基金，加快匹配
-    df = df[df["基金简称"].str.contains("ETF", na=False)]
-    print(f"   获取到 {len(df)} 只 ETF 相关基金")
-    return df
+        r = session.get(KLINE_URL, params=params, timeout=10)
+        data = r.json()
+        klines = data.get("data", {}).get("klines", [])
+        if klines:
+            parts = klines[-1].split(",")
+            return float(parts[8])  # 涨跌幅
+    except Exception:
+        pass
+    return None
 
 
-def match_etf_to_ranking(etf_df: pd.DataFrame, rank: pd.DataFrame) -> pd.DataFrame:
-    """场内 ETF ←→ 联接基金匹配。
+def fetch_all_etf_weekly(etf_df: pd.DataFrame, monday: str, friday: str) -> dict:
+    """顺序获取所有匹配 ETF 的周涨幅。
 
-    对每只场内 ETF，提取名称关键词，在排行数据中找对应的联接基金。
-    联接基金跟踪同一指数，周涨幅与 ETF 一致（误差 < 0.2%）。
-
-    示例：场内 "芯片ETF华夏" → 排行 "华夏国证半导体芯片ETF联接A"
+    Returns:
+        {code: {"weeklyReturn": float, "name": str}}
     """
-    print("🔗 正在匹配场内 ETF → 联接基金...")
-    rows = []
-    matched_etf = set()
+    codes = etf_df["code"].tolist()
+    total = len(codes)
+    results = {}
+    failed = 0
 
-    for _, etf in etf_df.iterrows():
-        name = str(etf["name"])
-        code = str(etf["code"])
-        keywords = name.replace("ETF", " ").split()
-        if not keywords:
-            continue
-        # 向量化匹配：排行基金名包含所有关键词
-        mask = rank["基金简称"].str.contains(keywords[0], na=False)
-        for kw in keywords[1:]:
-            mask &= rank["基金简称"].str.contains(kw, na=False)
-        matches = rank[mask]
-        if len(matches) == 0:
-            continue
+    print(f"📡 正在获取 {total} 只 ETF 的周涨幅（间隔 {REQUEST_DELAY}s）...")
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://quote.eastmoney.com/",
+    })
 
-        # 取匹配到的第一只联接基金
-        fund = matches.iloc[0]
-        fund_code = str(fund["基金代码"])
-        if code not in matched_etf:
-            matched_etf.add(code)
-            rows.append({
-                "code": code,
-                "name": name,
-                "fund_code": fund_code,
-                "fund_name": str(fund["基金简称"]),
-                "_weekly": float(fund["_weekly"]),
-            })
+    for i, code in enumerate(codes):
+        weekly = fetch_one_etf_weekly(code, monday, friday, session)
+        name = str(etf_df[etf_df["code"] == code]["name"].values[0])
+        if weekly is not None:
+            results[code] = {"weeklyReturn": weekly, "name": name}
+        else:
+            failed += 1
 
-    result = pd.DataFrame(rows)
-    print(f"   匹配成功 {len(result)} 只场内 ETF")
-    return result
+        if (i + 1) % 100 == 0 or (i + 1) == total:
+            print(f"   进度: {i+1}/{total} (成功 {len(results)}, 失败 {failed})")
+
+        time.sleep(REQUEST_DELAY)
+
+    if failed:
+        print(f"   ⚠️  {failed} 只 ETF 获取失败")
+    return results
 
 
 def fetch_fund_type_map() -> dict:
@@ -156,30 +164,26 @@ def fetch_fund_type_map() -> dict:
 # ============================================================
 
 
-def classify_etfs(etf_df: pd.DataFrame, themes: list, type_map: dict) -> dict:
-    """按主题关键词将 ETF 归类（向量化匹配）。"""
+def classify_etfs(etf_data: dict, themes: list) -> dict:
+    """按主题关键词将 ETF 归类。"""
     classified = {}
 
     for theme in themes:
         theme_name = theme["name"]
         pattern = "|".join(theme["keywords"])
-        mask = etf_df["name"].str.contains(pattern, na=False)
-        matched = etf_df[mask].sort_values("_weekly", ascending=False)
-
         funds = []
-        seen = set()
-        for _, row in matched.iterrows():
-            code = str(row["code"])
-            if code in seen:
-                continue
-            seen.add(code)
-            funds.append({
-                "code": code,
-                "name": str(row["name"]),
-                "weeklyReturn": float(row["_weekly"]),
-                "type": type_map.get(str(row["fund_code"]), ""),
-            })
+        for code, info in etf_data.items():
+            name = info["name"]
+            if any(kw in name for kw in theme["keywords"]):
+                funds.append({
+                    "code": code,
+                    "name": name,
+                    "weeklyReturn": info["weeklyReturn"],
+                    "type": "",
+                })
 
+        # 按周涨幅降序
+        funds.sort(key=lambda x: x["weeklyReturn"], reverse=True)
         classified[theme_name] = funds
         print(f"   {theme_name}: {len(funds)} 只")
 
@@ -187,7 +191,7 @@ def classify_etfs(etf_df: pd.DataFrame, themes: list, type_map: dict) -> dict:
 
 
 def build_result(classified: dict, top_n: int, week_range: str) -> dict:
-    """构建输出 JSON 结构：每主题取涨幅 Top N。"""
+    """构建输出 JSON。"""
     themes_result = []
     for theme_name, funds in classified.items():
         seen = set()
@@ -196,10 +200,7 @@ def build_result(classified: dict, top_n: int, week_range: str) -> dict:
             if f["code"] not in seen:
                 seen.add(f["code"])
                 unique.append(f)
-        themes_result.append({
-            "name": theme_name,
-            "funds": unique[:top_n],
-        })
+        themes_result.append({"name": theme_name, "funds": unique[:top_n]})
 
     return {
         "week": week_range,
@@ -214,13 +215,12 @@ def build_result(classified: dict, top_n: int, week_range: str) -> dict:
 
 
 def save_data(result: dict):
-    """写入 data/weekly/<week_start>.json 和 data/latest.json。"""
+    """写入 data/weekly/ 和 data/latest.json。"""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     WEEKLY_DIR.mkdir(parents=True, exist_ok=True)
 
     week_start = result["week"].split(" ~ ")[0]
     weekly_path = WEEKLY_DIR / f"{week_start}.json"
-
     content = json.dumps(result, ensure_ascii=False, indent=2)
 
     with open(weekly_path, "w", encoding="utf-8") as f:
@@ -235,7 +235,7 @@ def save_data(result: dict):
 
 
 def save_manifest():
-    """扫描 data/weekly/ 目录，生成 manifest.json。"""
+    """生成 manifest.json。"""
     weeks = []
     for f in sorted(WEEKLY_DIR.glob("*.json")):
         try:
@@ -249,9 +249,8 @@ def save_manifest():
         except (json.JSONDecodeError, KeyError):
             continue
 
-    manifest = {"weeks": weeks}
     with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
+        json.dump({"weeks": weeks}, f, ensure_ascii=False, indent=2)
     print(f"📋 已更新周索引: {len(weeks)} 周")
 
 
@@ -303,20 +302,35 @@ def cmd_update():
     """主命令：更新周涨幅数据。"""
     config = load_config()
     week_range = get_week_range()
-    print(f"📅 计算周期: {week_range}")
 
-    # 1. 拉取场内 ETF 列表
+    today = datetime.now().date()
+    last_monday = today - timedelta(days=today.weekday() + 7)
+    last_friday = last_monday + timedelta(days=4)
+    monday_s = last_monday.strftime("%Y%m%d")
+    friday_s = last_friday.strftime("%Y%m%d")
+
+    print(f"📅 计算周期: {week_range}")
+    print(f"   交易日: {last_monday} ~ {last_friday}")
+
+    # 1. 拉取 ETF 列表
     etf_df = fetch_etf_spot()
-    # 2. 拉取基金排行（获取周涨幅）
-    rank = fetch_fund_ranking()
-    # 3. 匹配 ETF → 联接基金
-    matched = match_etf_to_ranking(etf_df, rank)
-    # 4. 拉取基金类型
-    type_map = fetch_fund_type_map()
-    # 5. 按主题分类
-    print("🔍 正在按主题关键词归类...")
-    classified = classify_etfs(matched, config["themes"], type_map)
-    # 6. 生成结果
+
+    # 2. 预筛选：匹配任意主题关键词的 ETF
+    all_keywords = set()
+    for theme in config["themes"]:
+        for kw in theme["keywords"]:
+            all_keywords.add(kw)
+    pattern = "|".join(all_keywords)
+    mask = etf_df["name"].str.contains(pattern, na=False)
+    matched_df = etf_df[mask].copy()
+    print(f"🔍 关键词预筛选: {len(matched_df)} / {len(etf_df)} 只 ETF 匹配")
+
+    # 3. 获取每只 ETF 的周涨幅（直接调 K 线 API）
+    etf_data = fetch_all_etf_weekly(matched_df, monday_s, friday_s)
+
+    # 4. 按主题分类
+    print("🔍 正在按主题归类...")
+    classified = classify_etfs(etf_data, config["themes"])
     result = build_result(classified, config["topN"], week_range)
     save_data(result)
     print_summary(result)
@@ -334,11 +348,10 @@ def main():
         print("用法: python cli.py update")
         sys.exit(1)
 
-    command = sys.argv[1]
-    if command == "update":
+    if sys.argv[1] == "update":
         cmd_update()
     else:
-        print(f"未知命令: {command}")
+        print(f"未知命令: {sys.argv[1]}")
         print("用法: python cli.py update")
         sys.exit(1)
 
