@@ -1,0 +1,21 @@
+# 基金主题配置
+# topN: 每个主题展示的基金数量
+# themes: 主题列表，keywords 用于匹配基金名称
+topN: 5
+themes:
+  - name: 新能源
+    keywords: [光伏, 新能源, 锂电, 储能, 电池, 电动汽车, 充电桩, 碳中和]
+  - name: 半导体
+    keywords: [半导体, 芯片, 集成电路]
+  - name: 消费
+    keywords: [消费, 白酒, 食品饮料, 家电, 新零售]
+  - name: 医疗
+    keywords: [医疗, 医药, 生物, 健康, 创新药, 中药]
+  - name: 科技
+    keywords: [科技, 人工智能, AI, 数字经济, 信创, 云计算, 大数据, 互联网]
+  - name: 军工
+    keywords: [军工, 国防, 航天, 航空, 武器装备]
+  - name: 金融地产
+    keywords: [金融, 银行, 券商, 保险, 地产, 证券]
+  - name: 红利价值
+    keywords: [红利, 高股息, 价值, 低波]
