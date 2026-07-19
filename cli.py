@@ -45,11 +45,23 @@ def load_config():
 
 
 def get_week_range() -> str:
-    """上周一 ~ 上周日。"""
+    """刚结束这周的周一 ~ 周日。"""
     today = datetime.now().date()
-    last_monday = today - timedelta(days=today.weekday() + 7)
-    last_sunday = last_monday + timedelta(days=6)
+    # 找最近一个周五，往前推 4 天到周一
+    days_since_friday = (today.weekday() - 4) % 7
+    last_friday = today - timedelta(days=days_since_friday)
+    last_monday = last_friday - timedelta(days=4)
+    last_sunday = last_friday + timedelta(days=2)
     return f"{last_monday} ~ {last_sunday}"
+
+
+def get_trading_dates():
+    """返回 (前周五, 上周五) 用于净值计算。"""
+    today = datetime.now().date()
+    days_since_friday = (today.weekday() - 4) % 7
+    last_friday = today - timedelta(days=days_since_friday)
+    prev_friday = last_friday - timedelta(days=7)
+    return prev_friday, last_friday
 
 
 def fetch_etf_name_map() -> dict:
@@ -245,11 +257,7 @@ def cmd_update():
     """主命令：更新周涨幅数据。"""
     config = load_config()
     week_range = get_week_range()
-
-    today = datetime.now().date()
-    last_monday = today - timedelta(days=today.weekday() + 7)
-    last_friday = last_monday + timedelta(days=4)
-    prev_friday = last_friday - timedelta(days=7)
+    prev_friday, last_friday = get_trading_dates()
 
     print(f"📅 计算周期: {week_range}")
     print(f"   交易日: {prev_friday} ~ {last_friday}")
