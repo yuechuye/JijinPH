@@ -56,12 +56,12 @@ def get_week_range() -> str:
 
 
 def get_trading_dates():
-    """返回 (前周五, 上周五) 用于净值计算。"""
+    """返回 (上周一, 上周五) 用于净值计算。"""
     today = datetime.now().date()
     days_since_friday = (today.weekday() - 4) % 7
     last_friday = today - timedelta(days=days_since_friday)
-    prev_friday = last_friday - timedelta(days=7)
-    return prev_friday, last_friday
+    last_monday = last_friday - timedelta(days=4)
+    return last_monday, last_friday
 
 
 def fetch_etf_name_map() -> dict:
@@ -77,42 +77,40 @@ def fetch_etf_name_map() -> dict:
     return name_map
 
 
-def fetch_one_nav_weekly(code: str, prev_friday: str, this_friday: str):
+def fetch_one_nav_weekly(code: str, monday: str, friday: str):
     """获取单只 ETF 上周的净值周涨幅。
 
-    公式: (上周五单位净值 / 前周五单位净值 - 1) × 100
+    公式: (周五单位净值 / 周一单位净值 - 1) × 100
     """
     try:
         df = ak.fund_etf_fund_info_em(
             fund=code,
-            start_date=prev_friday,
-            end_date=this_friday,
+            start_date=monday,
+            end_date=friday,
         )
         if len(df) < 2:
             return None
 
-        # 精确匹配前周五和上周五的净值
-        prev_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{prev_friday[:4]}-{prev_friday[4:6]}-{prev_friday[6:]}")]
-        this_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{this_friday[:4]}-{this_friday[4:6]}-{this_friday[6:]}")]
+        mon_rows = df[df["净值日期"] == pd.Timestamp(
+            f"{monday[:4]}-{monday[4:6]}-{monday[6:]}")]
+        fri_rows = df[df["净值日期"] == pd.Timestamp(
+            f"{friday[:4]}-{friday[4:6]}-{friday[6:]}")]
 
-        if len(prev_rows) > 0 and len(this_rows) > 0:
-            prev_nav = float(prev_rows.iloc[0]["单位净值"])
-            this_nav = float(this_rows.iloc[0]["单位净值"])
+        if len(mon_rows) > 0 and len(fri_rows) > 0:
+            mon_nav = float(mon_rows.iloc[0]["单位净值"])
+            fri_nav = float(fri_rows.iloc[0]["单位净值"])
         else:
-            # 交易日不匹配时取首尾
-            prev_nav = float(df.iloc[0]["单位净值"])
-            this_nav = float(df.iloc[-1]["单位净值"])
+            mon_nav = float(df.iloc[0]["单位净值"])
+            fri_nav = float(df.iloc[-1]["单位净值"])
 
-        if prev_nav == 0:
+        if mon_nav == 0:
             return None
-        return round((this_nav / prev_nav - 1) * 100, 2)
+        return round((fri_nav / mon_nav - 1) * 100, 2)
     except Exception:
         return None
 
 
-def fetch_all_weekly(codes: list, prev_friday: str, this_friday: str) -> dict:
+def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
     """获取一组 ETF 的周涨幅。
 
     Returns:
@@ -124,7 +122,7 @@ def fetch_all_weekly(codes: list, prev_friday: str, this_friday: str) -> dict:
 
     print(f"📡 正在获取 {total} 只 ETF 的净值周涨幅...")
     for i, code in enumerate(codes):
-        ret = fetch_one_nav_weekly(code, prev_friday, this_friday)
+        ret = fetch_one_nav_weekly(code, monday, friday)
         if ret is not None:
             results[code] = ret
         else:
@@ -257,10 +255,10 @@ def cmd_update():
     """主命令：更新周涨幅数据。"""
     config = load_config()
     week_range = get_week_range()
-    prev_friday, last_friday = get_trading_dates()
+    last_monday, last_friday = get_trading_dates()
 
     print(f"📅 计算周期: {week_range}")
-    print(f"   交易日: {prev_friday} ~ {last_friday}")
+    print(f"   交易日: {last_monday}(周一) ~ {last_friday}(周五)")
 
     # 1. 收集所有 ETF 代码（去重）
     all_codes = list(dict.fromkeys(
@@ -274,7 +272,7 @@ def cmd_update():
     # 3. 获取净值周涨幅
     weekly = fetch_all_weekly(
         all_codes,
-        prev_friday.strftime("%Y%m%d"),
+        last_monday.strftime("%Y%m%d"),
         last_friday.strftime("%Y%m%d"),
     )
 
