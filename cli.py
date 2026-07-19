@@ -12,7 +12,6 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import requests
 import yaml
 import akshare as ak
 import pandas as pd
@@ -25,7 +24,6 @@ WEEKLY_DIR = DATA_DIR / "weekly"
 LATEST_PATH = DATA_DIR / "latest.json"
 MANIFEST_PATH = DATA_DIR / "manifest.json"
 
-KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 REQUEST_DELAY = 0.3  # 请求间隔，避免被限流
 
 
@@ -73,43 +71,42 @@ def fetch_etf_spot() -> pd.DataFrame:
     return df
 
 
-def get_secid(code: str) -> str:
-    """ETF 代码 → 东方财富 secid。
+def fetch_one_etf_weekly(code: str, prev_friday: str, this_friday: str):
+    """获取单只 ETF 上周的净值周涨幅。
 
-    上交所 (51xxxx, 56xxxx, 58xxxx...) → 1.{code}
-    深交所 (15xxxx, 16xxxx...)       → 0.{code}
+    通过 fund_etf_fund_info_em 获取历史净值，用前周五和上周五的
+    单位净值计算周涨幅：(上周五净值 / 前周五净值 - 1) * 100。
+
+    API 域名: api.fund.eastmoney.com（稳定，无限流问题）
     """
-    if code.startswith("5"):
-        return f"1.{code}"
-    else:
-        return f"0.{code}"
-
-
-def fetch_one_etf_weekly(code: str, monday: str, friday: str, session: requests.Session):
-    """获取单只 ETF 上周周涨幅（前复权）。"""
-    params = {
-        "fields1": "f1,f2,f3,f4,f5,f6",
-        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-        "ut": "7eea3edcaed734bea9cbfc24409ed989",
-        "klt": "102",       # 周线
-        "fqt": "1",         # 前复权
-        "beg": monday,
-        "end": friday,
-        "secid": get_secid(code),
-    }
     try:
-        r = session.get(KLINE_URL, params=params, timeout=10)
-        data = r.json()
-        klines = data.get("data", {}).get("klines", [])
-        if klines:
-            parts = klines[-1].split(",")
-            return float(parts[8])  # 涨跌幅
+        df = ak.fund_etf_fund_info_em(
+            fund=code,
+            start_date=prev_friday,
+            end_date=this_friday,
+        )
+        if len(df) < 2:
+            return None
+
+        prev_rows = df[df["净值日期"] == pd.Timestamp(prev_friday[:4] + "-" + prev_friday[4:6] + "-" + prev_friday[6:])]
+        this_rows = df[df["净值日期"] == pd.Timestamp(this_friday[:4] + "-" + this_friday[4:6] + "-" + this_friday[6:])]
+
+        if len(prev_rows) == 0 or len(this_rows) == 0:
+            # 可能那两天不是交易日，取第一条和最后一条
+            prev_nav = float(df.iloc[0]["单位净值"])
+            this_nav = float(df.iloc[-1]["单位净值"])
+        else:
+            prev_nav = float(prev_rows.iloc[0]["单位净值"])
+            this_nav = float(this_rows.iloc[0]["单位净值"])
+
+        if prev_nav == 0:
+            return None
+        return (this_nav / prev_nav - 1) * 100
     except Exception:
-        pass
-    return None
+        return None
 
 
-def fetch_all_etf_weekly(etf_df: pd.DataFrame, monday: str, friday: str) -> dict:
+def fetch_all_etf_weekly(etf_df: pd.DataFrame, prev_friday: str, this_friday: str) -> dict:
     """顺序获取所有匹配 ETF 的周涨幅。
 
     Returns:
@@ -119,6 +116,25 @@ def fetch_all_etf_weekly(etf_df: pd.DataFrame, monday: str, friday: str) -> dict
     total = len(codes)
     results = {}
     failed = 0
+
+    print(f"📡 正在获取 {total} 只 ETF 的净值周涨幅（间隔 {REQUEST_DELAY}s）...")
+
+    for i, code in enumerate(codes):
+        weekly = fetch_one_etf_weekly(code, prev_friday, this_friday)
+        name = str(etf_df[etf_df["code"] == code]["name"].values[0])
+        if weekly is not None:
+            results[code] = {"weeklyReturn": weekly, "name": name}
+        else:
+            failed += 1
+
+        if (i + 1) % 100 == 0 or (i + 1) == total:
+            print(f"   进度: {i+1}/{total} (成功 {len(results)}, 失败 {failed})")
+
+        time.sleep(REQUEST_DELAY)
+
+    if failed:
+        print(f"   ⚠️  {failed} 只 ETF 获取失败")
+    return results
 
     print(f"📡 正在获取 {total} 只 ETF 的周涨幅（间隔 {REQUEST_DELAY}s）...")
     session = requests.Session()
@@ -306,11 +322,10 @@ def cmd_update():
     today = datetime.now().date()
     last_monday = today - timedelta(days=today.weekday() + 7)
     last_friday = last_monday + timedelta(days=4)
-    monday_s = last_monday.strftime("%Y%m%d")
-    friday_s = last_friday.strftime("%Y%m%d")
+    prev_friday = last_friday - timedelta(days=7)
 
     print(f"📅 计算周期: {week_range}")
-    print(f"   交易日: {last_monday} ~ {last_friday}")
+    print(f"   交易日: {prev_friday}(前周五) ~ {last_friday}(上周五)")
 
     # 1. 拉取 ETF 列表
     etf_df = fetch_etf_spot()
@@ -325,8 +340,12 @@ def cmd_update():
     matched_df = etf_df[mask].copy()
     print(f"🔍 关键词预筛选: {len(matched_df)} / {len(etf_df)} 只 ETF 匹配")
 
-    # 3. 获取每只 ETF 的周涨幅（直接调 K 线 API）
-    etf_data = fetch_all_etf_weekly(matched_df, monday_s, friday_s)
+    # 3. 获取每只 ETF 的周涨幅（净值法：前周五净值 → 上周五净值）
+    etf_data = fetch_all_etf_weekly(
+        matched_df,
+        prev_friday.strftime("%Y%m%d"),
+        last_friday.strftime("%Y%m%d"),
+    )
 
     # 4. 按主题分类
     print("🔍 正在按主题归类...")
