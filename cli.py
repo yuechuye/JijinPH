@@ -77,35 +77,29 @@ def fetch_etf_name_map() -> dict:
     return name_map
 
 
-def fetch_one_nav_weekly(code: str, monday: str, friday: str):
-    """获取单只 ETF 上周的净值周涨幅。
+def fetch_one_etf_weekly(code: str, monday: str, friday: str):
+    """用日 K 线收盘价算周涨幅。
 
-    公式: (周五单位净值 / 周一单位净值 - 1) × 100
+    公式: (周五收盘 / 周一收盘 - 1) × 100
+    前复权，自动处理除权除息。
     """
     try:
-        df = ak.fund_etf_fund_info_em(
-            fund=code,
+        df = ak.fund_etf_hist_em(
+            symbol=code,
+            period="daily",
             start_date=monday,
             end_date=friday,
+            adjust="qfq",
         )
         if len(df) < 2:
             return None
 
-        mon_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{monday[:4]}-{monday[4:6]}-{monday[6:]}")]
-        fri_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{friday[:4]}-{friday[4:6]}-{friday[6:]}")]
+        mon_close = float(df.iloc[0]["收盘"])
+        fri_close = float(df.iloc[-1]["收盘"])
 
-        if len(mon_rows) > 0 and len(fri_rows) > 0:
-            mon_nav = float(mon_rows.iloc[0]["单位净值"])
-            fri_nav = float(fri_rows.iloc[0]["单位净值"])
-        else:
-            mon_nav = float(df.iloc[0]["单位净值"])
-            fri_nav = float(df.iloc[-1]["单位净值"])
-
-        if mon_nav == 0:
+        if mon_close == 0:
             return None
-        return round((fri_nav / mon_nav - 1) * 100, 2)
+        return round((fri_close / mon_close - 1) * 100, 2)
     except Exception:
         return None
 
@@ -122,7 +116,7 @@ def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
 
     print(f"📡 正在获取 {total} 只 ETF 的净值周涨幅...")
     for i, code in enumerate(codes):
-        ret = fetch_one_nav_weekly(code, monday, friday)
+        ret = fetch_one_etf_weekly(code, monday, friday)
         if ret is not None:
             results[code] = ret
         else:
