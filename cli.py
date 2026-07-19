@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """基金周涨幅榜 CLI — 每周获取精选场内 ETF 的周涨幅。
 
-数据源: push2his.eastmoney.com 日 K 线（前复权）
-策略: 每批 5 只，批次间停 3 秒，避免被限流
+数据源: api.fund.eastmoney.com 净值接口（官方单位净值）
+计算: (周五净值 / 周一净值 - 1) × 100，纯自己算
 """
 
 import json
@@ -12,7 +12,6 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import requests
 import yaml
 import akshare as ak
 import pandas as pd
@@ -24,10 +23,6 @@ DATA_DIR = ROOT / "data"
 WEEKLY_DIR = DATA_DIR / "weekly"
 LATEST_PATH = DATA_DIR / "latest.json"
 MANIFEST_PATH = DATA_DIR / "manifest.json"
-
-KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
-BATCH_SIZE = 5       # 每批几只
-BATCH_DELAY = 3       # 批次间隔（秒）
 
 
 def load_config():
@@ -80,66 +75,59 @@ def fetch_etf_name_map() -> dict:
     return name_map
 
 
-def get_secid(code: str) -> str:
-    """ETF 代码 → secid（0=深交所, 1=上交所）。"""
-    return f"0.{code}" if code.startswith("1") else f"1.{code}"
+def fetch_one_etf_weekly(code: str, monday: str, friday: str):
+    """净值算周涨幅：(周五单位净值 / 周一单位净值 - 1) × 100。
 
-
-def fetch_one_etf_weekly(code: str, monday: str, friday: str, session: requests.Session):
-    """日 K 线算周涨幅：周一收盘 → 周五收盘，前复权。
-
-    日 K 线返回 OHLC（开/高/低/收），纯自己算，不依赖预计算字段。
+    接口: api.fund.eastmoney.com/f10/lsjz
+    返回每日单位净值，自己算日涨跌和周涨幅。
     """
-    params = {
-        "fields1": "f1,f2,f3,f4,f5,f6",
-        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-        "ut": "7eea3edcaed734bea9cbfc24409ed989",
-        "klt": "101", "fqt": "1",
-        "beg": monday, "end": friday,
-        "secid": get_secid(code),
-    }
     try:
-        r = session.get(KLINE_URL, params=params, timeout=10)
-        data = r.json()
-        klines = data.get("data", {}).get("klines", [])
-        if len(klines) < 2:
+        df = ak.fund_etf_fund_info_em(
+            fund=code,
+            start_date=monday,
+            end_date=friday,
+        )
+        if len(df) < 2:
             return None
-        mon_close = float(klines[0].split(",")[2])
-        fri_close = float(klines[-1].split(",")[2])
-        if mon_close == 0:
+
+        mon_rows = df[df["净值日期"] == pd.Timestamp(
+            f"{monday[:4]}-{monday[4:6]}-{monday[6:]}")]
+        fri_rows = df[df["净值日期"] == pd.Timestamp(
+            f"{friday[:4]}-{friday[4:6]}-{friday[6:]}")]
+
+        if len(mon_rows) > 0 and len(fri_rows) > 0:
+            mon_nav = float(mon_rows.iloc[0]["单位净值"])
+            fri_nav = float(fri_rows.iloc[0]["单位净值"])
+        else:
+            mon_nav = float(df.iloc[0]["单位净值"])
+            fri_nav = float(df.iloc[-1]["单位净值"])
+
+        if mon_nav == 0 or fri_nav == 0:
             return None
-        return round((fri_close / mon_close - 1) * 100, 2)
+        return round((fri_nav / mon_nav - 1) * 100, 2)
     except Exception:
         return None
 
 
 def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
-    """分批获取 ETF 周涨幅，每批 {BATCH_SIZE} 只，批次间停 {BATCH_DELAY}s。"""
+    """获取所有 ETF 的周涨幅。"""
     total = len(codes)
     results = {}
     failed = 0
 
-    print(f"📡 正在用日K线获取 {total} 只 ETF 周涨幅 (每批{BATCH_SIZE}只, 间隔{BATCH_DELAY}s)...")
-
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://quote.eastmoney.com/",
-    })
+    print(f"📡 正在获取 {total} 只 ETF 的净值周涨幅...")
 
     for i, code in enumerate(codes):
-        ret = fetch_one_etf_weekly(code, monday, friday, session)
+        ret = fetch_one_etf_weekly(code, monday, friday)
         if ret is not None:
             results[code] = ret
         else:
             failed += 1
 
-        # 每批结束停一下
-        if (i + 1) % BATCH_SIZE == 0 and (i + 1) < total:
-            time.sleep(BATCH_DELAY)
-
         if (i + 1) % 50 == 0 or (i + 1) == total:
             print(f"   进度: {i+1}/{total} (成功 {len(results)}, 失败 {failed})")
+
+        time.sleep(0.2)
 
     if failed:
         print(f"   ⚠️  {failed} 只 ETF 获取失败")
