@@ -134,6 +134,7 @@
     const medalEmoji = ["🥇", "🥈", "🥉"];
 
     fundList.innerHTML = funds
+      .filter((fund) => fund.weeklyReturn != null && !isNaN(fund.weeklyReturn))
       .map((fund, i) => {
         const medalClass = i < 3 ? medals[i] : "";
         const returnClass = fund.weeklyReturn >= 0 ? "up" : "down";

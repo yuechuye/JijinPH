@@ -49,7 +49,7 @@
         {
           "code": "510580",
           "name": "中证500ETF易方达",
-          "weeklyReturn": NaN,
+          "weeklyReturn": null,
           "type": ""
         },
         {
@@ -323,7 +323,7 @@
         {
           "code": "512660",
           "name": "军工ETF国泰",
-          "weeklyReturn": NaN,
+          "weeklyReturn": null,
           "type": ""
         },
         {
@@ -393,7 +393,7 @@
         {
           "code": "515060",
           "name": "房地产ETF华夏",
-          "weeklyReturn": NaN,
+          "weeklyReturn": null,
           "type": ""
         },
         {
@@ -656,7 +656,7 @@
         {
           "code": "515220",
           "name": "煤炭ETF国泰",
-          "weeklyReturn": NaN,
+          "weeklyReturn": null,
           "type": ""
         },
         {
@@ -697,7 +697,7 @@
         {
           "code": "159731",
           "name": "石化ETF华夏",
-          "weeklyReturn": NaN,
+          "weeklyReturn": null,
           "type": ""
         }
       ]
@@ -743,7 +743,7 @@
         {
           "code": "513500",
           "name": "标普500ETF博时",
-          "weeklyReturn": NaN,
+          "weeklyReturn": null,
           "type": ""
         },
         {
@@ -802,7 +802,7 @@
         {
           "code": "513770",
           "name": "港股互联网ETF华宝",
-          "weeklyReturn": NaN,
+          "weeklyReturn": null,
           "type": ""
         }
       ]

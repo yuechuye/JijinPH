@@ -104,7 +104,11 @@ def fetch_one_etf_weekly(code: str, monday: str, friday: str):
 
         if mon_nav == 0 or fri_nav == 0:
             return None
-        return round((fri_nav / mon_nav - 1) * 100, 2)
+        ret = (fri_nav / mon_nav - 1) * 100
+        # NaN guard: invalid division or API returning non-finite values
+        if ret != ret or ret == float("inf") or ret == float("-inf"):
+            return None
+        return round(ret, 2)
     except Exception:
         return None
 
