@@ -78,28 +78,35 @@ def fetch_etf_name_map() -> dict:
 
 
 def fetch_one_etf_weekly(code: str, monday: str, friday: str):
-    """用日 K 线收盘价算周涨幅。
+    """用净值算周涨幅：取周一和周五的单位净值，自己算。
 
-    公式: (周五收盘 / 周一收盘 - 1) × 100
-    前复权，自动处理除权除息。
+    公式: (周五净值 / 周一净值 - 1) × 100
+    不依赖 API 的日增长率字段，纯从净值算。
     """
     try:
-        df = ak.fund_etf_hist_em(
-            symbol=code,
-            period="daily",
+        df = ak.fund_etf_fund_info_em(
+            fund=code,
             start_date=monday,
             end_date=friday,
-            adjust="qfq",
         )
         if len(df) < 2:
             return None
 
-        mon_close = float(df.iloc[0]["收盘"])
-        fri_close = float(df.iloc[-1]["收盘"])
+        mon_rows = df[df["净值日期"] == pd.Timestamp(
+            f"{monday[:4]}-{monday[4:6]}-{monday[6:]}")]
+        fri_rows = df[df["净值日期"] == pd.Timestamp(
+            f"{friday[:4]}-{friday[4:6]}-{friday[6:]}")]
 
-        if mon_close == 0:
+        if len(mon_rows) > 0 and len(fri_rows) > 0:
+            mon_nav = float(mon_rows.iloc[0]["单位净值"])
+            fri_nav = float(fri_rows.iloc[0]["单位净值"])
+        else:
+            mon_nav = float(df.iloc[0]["单位净值"])
+            fri_nav = float(df.iloc[-1]["单位净值"])
+
+        if mon_nav == 0 or fri_nav == 0:
             return None
-        return round((fri_close / mon_close - 1) * 100, 2)
+        return round((fri_nav / mon_nav - 1) * 100, 2)
     except Exception:
         return None
 
