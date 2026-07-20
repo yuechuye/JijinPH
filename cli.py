@@ -226,16 +226,16 @@ def _calc_momentum_score(t0: float | None, t_m1: float | None,
     return {"score": score, "returns": returns}
 
 
-def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
-    """获取所有 ETF 的周涨幅。"""
+def fetch_all_momentum(codes: list, dates: dict) -> dict:
+    """获取所有 ETF 的周涨幅和动量得分。"""
     total = len(codes)
     results = {}
     failed = 0
 
-    print(f"📡 正在获取 {total} 只 ETF 的净值周涨幅...")
+    print(f"📡 正在获取 {total} 只 ETF 的净值数据（周涨幅 + 动量得分）...")
 
     for i, code in enumerate(codes):
-        ret = fetch_one_etf_weekly(code, monday, friday)
+        ret = fetch_one_etf_momentum(code, dates)
         if ret is not None:
             results[code] = ret
         else:
@@ -251,30 +251,49 @@ def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
     return results
 
 
-def build_result(config: dict, name_map: dict, weekly: dict, week_range: str) -> dict:
-    """构建输出 JSON。"""
+def build_result(config: dict, name_map: dict, momentum_data: dict, week_range: str) -> dict:
+    """构建输出 JSON，包含主题排名和动量总榜。"""
     themes_result = []
+    all_funds = []  # 跨主题动量总榜
+
     for theme in config["themes"]:
         funds = []
         for code in theme["funds"]:
-            if code in weekly:
-                funds.append({
+            if code in momentum_data:
+                md = momentum_data[code]
+                entry = {
                     "code": code,
                     "name": name_map.get(code, code),
-                    "weeklyReturn": weekly[code],
+                    "weeklyReturn": md["weeklyReturn"],
+                    "momentumScore": md["momentumScore"],
+                    "returns": md.get("returns"),
                     "type": "",
-                })
+                }
+                funds.append(entry)
+                # 只有有动量得分的才进入总榜
+                if md["momentumScore"] is not None:
+                    all_funds.append({
+                        "code": code,
+                        "name": name_map.get(code, code),
+                        "theme": theme["name"],
+                        "momentumScore": md["momentumScore"],
+                    })
+
         # 按周涨幅降序
-        funds.sort(key=lambda x: x["weeklyReturn"], reverse=True)
+        funds.sort(key=lambda x: x["weeklyReturn"] if x["weeklyReturn"] is not None else float("-inf"), reverse=True)
         themes_result.append({
             "name": theme["name"],
             "funds": funds[:config["topN"]],
         })
 
+    # 动量总榜按 momentumScore 降序
+    all_funds.sort(key=lambda x: x["momentumScore"], reverse=True)
+
     return {
         "week": week_range,
         "updatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "themes": themes_result,
+        "momentumRanking": all_funds[:20],  # 总榜取前20
     }
 
 
@@ -358,6 +377,13 @@ def print_summary(result: dict):
             prefix = medals[i] if i < 3 else f"  {i+1}."
             sign = "+" if fund["weeklyReturn"] >= 0 else ""
             print(f"   {prefix} {fund['code']} {fund['name']:<16s} {sign}{fund['weeklyReturn']:.2f}%")
+    # 动量总榜 Top5
+    if result.get("momentumRanking"):
+        print(f"\n🚀 动量总榜 Top5（跨主题）")
+        print(f"   {'─'*40}")
+        for i, fund in enumerate(result["momentumRanking"][:5]):
+            theme_tag = f"[{fund['theme']}]"
+            print(f"   {i+1}. {fund['code']} {fund['name']:<14s} {theme_tag:<12s} 动量: {fund['momentumScore']:.2f}")
     print(f"\n{'='*50}")
 
 
@@ -369,11 +395,11 @@ def print_summary(result: dict):
 def cmd_update():
     """主命令：更新周涨幅数据。"""
     config = load_config()
-    week_range = get_week_range()
-    last_monday, last_friday = get_trading_dates()
+    dates = get_momentum_dates()
+    week_range = get_week_range(dates["friday_before"], dates["thursday"])
 
     print(f"📅 计算周期: {week_range}")
-    print(f"   交易日: {last_monday}(周一) ~ {last_friday}(周五)")
+    print(f"   交易日: {dates['friday_before']}(周五) ~ {dates['thursday']}(周四)")
 
     # 1. 收集所有 ETF 代码（去重）
     all_codes = list(dict.fromkeys(
@@ -384,15 +410,11 @@ def cmd_update():
     # 2. 获取 ETF 名称映射
     name_map = fetch_etf_name_map()
 
-    # 3. 获取净值周涨幅
-    weekly = fetch_all_weekly(
-        all_codes,
-        last_monday.strftime("%Y%m%d"),
-        last_friday.strftime("%Y%m%d"),
-    )
+    # 3. 获取净值数据（周涨幅 + 动量得分）
+    momentum_data = fetch_all_momentum(all_codes, dates)
 
     # 4. 构建结果
-    result = build_result(config, name_map, weekly, week_range)
+    result = build_result(config, name_map, momentum_data, week_range)
     save_data(result)
     print_summary(result)
 
