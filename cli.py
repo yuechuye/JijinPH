@@ -12,6 +12,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 import yaml
 import akshare as ak
@@ -95,7 +96,7 @@ def fetch_etf_name_map() -> dict:
     return name_map
 
 
-def fetch_one_nav(code: str, date_str: str) -> float | None:
+def fetch_one_nav(code: str, date_str: str) -> Optional[float]:
     """获取某只ETF在某日的单位净值。
 
     如果当天非交易日，取最近一个不晚于该日的交易日净值。
@@ -128,7 +129,7 @@ def fetch_one_nav(code: str, date_str: str) -> float | None:
         return None
 
 
-def fetch_one_etf_momentum(code: str, dates: dict) -> dict | None:
+def fetch_one_etf_momentum(code: str, dates: dict) -> Optional[dict]:
     """获取一只ETF的周涨幅和动量得分。
 
     Args:
@@ -176,9 +177,9 @@ def fetch_one_etf_momentum(code: str, dates: dict) -> dict | None:
         return None
 
 
-def _calc_momentum_score(t0: float | None, t_m1: float | None,
-                         t_m2: float | None, t_m4: float | None,
-                         t_m12: float | None) -> dict | None:
+def _calc_momentum_score(t0: Optional[float], t_m1: Optional[float],
+                         t_m2: Optional[float], t_m4: Optional[float],
+                         t_m12: Optional[float]) -> Optional[dict]:
     """计算动量得分。
 
     加权公式: 1周×40% + 2周×30% + 4周×20% + 12周×10%
@@ -198,7 +199,7 @@ def _calc_momentum_score(t0: float | None, t_m1: float | None,
         ("12w", t_m12, 0.1),
     ]
 
-    returns: dict[str, float | None] = {}
+    returns: dict[str, Optional[float]] = {}
     available_weight = 0.0
     weighted_sum = 0.0
 
