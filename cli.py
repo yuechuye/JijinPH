@@ -6,6 +6,7 @@
 """
 
 import json
+import math
 import subprocess
 import sys
 import time
@@ -103,7 +104,7 @@ def fetch_one_nav(code: str, date_str: str) -> float | None:
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d")
         # API 使用 YYYYMMDD 格式
-        start_date = (target_date - timedelta(days=5)).strftime("%Y%m%d")
+        start_date = (target_date - timedelta(days=10)).strftime("%Y%m%d")
         end_date = target_date.strftime("%Y%m%d")
 
         df = ak.fund_etf_fund_info_em(
@@ -140,10 +141,15 @@ def fetch_one_etf_momentum(code: str, dates: dict) -> dict | None:
     try:
         # 取各时间点净值
         t0 = fetch_one_nav(code, dates["thursday"])
+        time.sleep(0.1)
         t_m1 = fetch_one_nav(code, dates["t_minus_1"])
+        time.sleep(0.1)
         t_m2 = fetch_one_nav(code, dates["t_minus_2"])
+        time.sleep(0.1)
         t_m4 = fetch_one_nav(code, dates["t_minus_4"])
+        time.sleep(0.1)
         t_m12 = fetch_one_nav(code, dates["t_minus_12"])
+        time.sleep(0.1)
         fri_nav = fetch_one_nav(code, dates["friday_before"])
 
         # 阶段一：周涨幅 = (周四净值 / 上周五净值 - 1) × 100
@@ -152,11 +158,11 @@ def fetch_one_etf_momentum(code: str, dates: dict) -> dict | None:
         else:
             weekly_return = round((t0 / fri_nav - 1) * 100, 2)
             # NaN guard
-            if weekly_return != weekly_return or abs(weekly_return) == float("inf"):
+            if math.isnan(weekly_return) or math.isinf(weekly_return):
                 weekly_return = None
 
         # 阶段二：动量得分
-        momentum = _calc_momentum_score(code, t0, t_m1, t_m2, t_m4, t_m12)
+        momentum = _calc_momentum_score(t0, t_m1, t_m2, t_m4, t_m12)
 
         if weekly_return is None and momentum is None:
             return None
@@ -170,7 +176,7 @@ def fetch_one_etf_momentum(code: str, dates: dict) -> dict | None:
         return None
 
 
-def _calc_momentum_score(code: str, t0: float | None, t_m1: float | None,
+def _calc_momentum_score(t0: float | None, t_m1: float | None,
                          t_m2: float | None, t_m4: float | None,
                          t_m12: float | None) -> dict | None:
     """计算动量得分。
@@ -200,7 +206,7 @@ def _calc_momentum_score(code: str, t0: float | None, t_m1: float | None,
         if nav is not None and nav > 0:
             r = (t0 / nav - 1) * 100
             # NaN guard
-            if r == r and abs(r) != float("inf"):
+            if not math.isnan(r) and not math.isinf(r):
                 returns[label] = round(r, 2)
                 weighted_sum += r * weight
                 available_weight += weight
