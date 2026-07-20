@@ -42,18 +42,18 @@ def load_config():
     return config
 
 
-def get_week_range(start_date, end_date):
+def get_week_range(start_date: str, end_date: str) -> str:
     """根据计算用的起止日生成展示用的周范围字符串。"""
     return f"{start_date} ~ {end_date}"
 
 
-def get_momentum_dates():
+def get_momentum_dates() -> dict[str, str]:
     """返回动量计算所需的全部日期。
 
     阶段一（排名）使用: friday_before（上周五）和 thursday（本周四）
     阶段二（动量）额外使用: T-1, T-2, T-4, T-12（均为周四）
 
-    返回 dict，所有值为 "YYYYMMDD" 格式字符串。
+    返回 dict，所有值为 "YYYY-MM-DD" 格式字符串。
     """
     today = datetime.now().date()
 
@@ -72,12 +72,12 @@ def get_momentum_dates():
     t_minus_12 = thursday - timedelta(weeks=12) # 12周前
 
     return {
-        "friday_before": friday_before.strftime("%Y%m%d"),
-        "thursday": thursday.strftime("%Y%m%d"),
-        "t_minus_1": t_minus_1.strftime("%Y%m%d"),
-        "t_minus_2": t_minus_2.strftime("%Y%m%d"),
-        "t_minus_4": t_minus_4.strftime("%Y%m%d"),
-        "t_minus_12": t_minus_12.strftime("%Y%m%d"),
+        "friday_before": friday_before.strftime("%Y-%m-%d"),
+        "thursday": thursday.strftime("%Y-%m-%d"),
+        "t_minus_1": t_minus_1.strftime("%Y-%m-%d"),
+        "t_minus_2": t_minus_2.strftime("%Y-%m-%d"),
+        "t_minus_4": t_minus_4.strftime("%Y-%m-%d"),
+        "t_minus_12": t_minus_12.strftime("%Y-%m-%d"),
     }
 
 
