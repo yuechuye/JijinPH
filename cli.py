@@ -2,7 +2,7 @@
 """基金周涨幅榜 CLI — 每周获取精选场内 ETF 的周涨幅。
 
 数据源: api.fund.eastmoney.com 净值接口（官方单位净值）
-计算: (周五净值 / 周一净值 - 1) × 100，纯自己算
+计算: (周四净值 / 上周五净值 - 1) × 100, 动量: 1w/2w/4w/12w 加权得分
 """
 
 import json
@@ -374,6 +374,8 @@ def print_summary(result: dict):
             continue
         medals = ["🥇", "🥈", "🥉"]
         for i, fund in enumerate(theme["funds"]):
+            if fund["weeklyReturn"] is None:
+                continue
             prefix = medals[i] if i < 3 else f"  {i+1}."
             sign = "+" if fund["weeklyReturn"] >= 0 else ""
             print(f"   {prefix} {fund['code']} {fund['name']:<16s} {sign}{fund['weeklyReturn']:.2f}%")
