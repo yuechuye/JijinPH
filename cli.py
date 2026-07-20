@@ -42,24 +42,43 @@ def load_config():
     return config
 
 
-def get_week_range() -> str:
-    """刚结束这周的周一 ~ 周日。"""
-    today = datetime.now().date()
-    # 找最近一个周五，往前推 4 天到周一
-    days_since_friday = (today.weekday() - 4) % 7
-    last_friday = today - timedelta(days=days_since_friday)
-    last_monday = last_friday - timedelta(days=4)
-    last_sunday = last_friday + timedelta(days=2)
-    return f"{last_monday} ~ {last_sunday}"
+def get_week_range(start_date, end_date):
+    """根据计算用的起止日生成展示用的周范围字符串。"""
+    return f"{start_date} ~ {end_date}"
 
 
-def get_trading_dates():
-    """返回 (上周一, 上周五) 用于净值计算。"""
+def get_momentum_dates():
+    """返回动量计算所需的全部日期。
+
+    阶段一（排名）使用: friday_before（上周五）和 thursday（本周四）
+    阶段二（动量）额外使用: T-1, T-2, T-4, T-12（均为周四）
+
+    返回 dict，所有值为 "YYYYMMDD" 格式字符串。
+    """
     today = datetime.now().date()
-    days_since_friday = (today.weekday() - 4) % 7
-    last_friday = today - timedelta(days=days_since_friday)
-    last_monday = last_friday - timedelta(days=4)
-    return last_monday, last_friday
+
+    # 找最近的周四（阶段一终点 / 阶段二 T0）
+    days_since_thursday = (today.weekday() - 3) % 7
+    thursday = today - timedelta(days=days_since_thursday)
+
+    # 上周五（阶段一起点）
+    # 周四往前数 6 天 = 上周五
+    friday_before = thursday - timedelta(days=6)
+
+    # 动量时间点：均为周四
+    t_minus_1 = thursday - timedelta(weeks=1)   # 1周前
+    t_minus_2 = thursday - timedelta(weeks=2)   # 2周前
+    t_minus_4 = thursday - timedelta(weeks=4)   # 4周前
+    t_minus_12 = thursday - timedelta(weeks=12) # 12周前
+
+    return {
+        "friday_before": friday_before.strftime("%Y%m%d"),
+        "thursday": thursday.strftime("%Y%m%d"),
+        "t_minus_1": t_minus_1.strftime("%Y%m%d"),
+        "t_minus_2": t_minus_2.strftime("%Y%m%d"),
+        "t_minus_4": t_minus_4.strftime("%Y%m%d"),
+        "t_minus_12": t_minus_12.strftime("%Y%m%d"),
+    }
 
 
 def fetch_etf_name_map() -> dict:
