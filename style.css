@@ -173,6 +173,9 @@ body {
   font-weight: 700;
   flex-shrink: 0;
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 .fund-return.up   { color: var(--up); }
 .fund-return.down { color: var(--down); }
@@ -191,6 +194,30 @@ body {
   padding: 24px 0;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* ===== Momentum Tab ===== */
+.momentum-tab {
+  font-weight: 600;
+  border-color: #9f7aea;
+  color: #6b46c1;
+  background: #faf5ff;
+}
+.momentum-tab.active {
+  background: #805ad5;
+  color: #fff;
+  border-color: #805ad5;
+}
+
+.momentum-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: #805ad5;
+  text-align: right;
+  margin-top: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* ===== Responsive ===== */

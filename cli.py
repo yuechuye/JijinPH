@@ -2,15 +2,17 @@
 """基金周涨幅榜 CLI — 每周获取精选场内 ETF 的周涨幅。
 
 数据源: api.fund.eastmoney.com 净值接口（官方单位净值）
-计算: (周五净值 / 周一净值 - 1) × 100，纯自己算
+计算: (周四净值 / 上周五净值 - 1) × 100, 动量: 1w/2w/4w/12w 加权得分
 """
 
 import json
+import math
 import subprocess
 import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 import yaml
 import akshare as ak
@@ -42,24 +44,43 @@ def load_config():
     return config
 
 
-def get_week_range() -> str:
-    """刚结束这周的周一 ~ 周日。"""
-    today = datetime.now().date()
-    # 找最近一个周五，往前推 4 天到周一
-    days_since_friday = (today.weekday() - 4) % 7
-    last_friday = today - timedelta(days=days_since_friday)
-    last_monday = last_friday - timedelta(days=4)
-    last_sunday = last_friday + timedelta(days=2)
-    return f"{last_monday} ~ {last_sunday}"
+def get_week_range(start_date: str, end_date: str) -> str:
+    """根据计算用的起止日生成展示用的周范围字符串。"""
+    return f"{start_date} ~ {end_date}"
 
 
-def get_trading_dates():
-    """返回 (上周一, 上周五) 用于净值计算。"""
+def get_momentum_dates() -> dict[str, str]:
+    """返回动量计算所需的全部日期。
+
+    阶段一（排名）使用: friday_before（上周五）和 thursday（本周四）
+    阶段二（动量）额外使用: T-1, T-2, T-4, T-12（均为周四）
+
+    返回 dict，所有值为 "YYYY-MM-DD" 格式字符串。
+    """
     today = datetime.now().date()
-    days_since_friday = (today.weekday() - 4) % 7
-    last_friday = today - timedelta(days=days_since_friday)
-    last_monday = last_friday - timedelta(days=4)
-    return last_monday, last_friday
+
+    # 找最近的周四（阶段一终点 / 阶段二 T0）
+    days_since_thursday = (today.weekday() - 3) % 7
+    thursday = today - timedelta(days=days_since_thursday)
+
+    # 上周五（阶段一起点）
+    # 周四往前数 6 天 = 上周五
+    friday_before = thursday - timedelta(days=6)
+
+    # 动量时间点：均为周四
+    t_minus_1 = thursday - timedelta(weeks=1)   # 1周前
+    t_minus_2 = thursday - timedelta(weeks=2)   # 2周前
+    t_minus_4 = thursday - timedelta(weeks=4)   # 4周前
+    t_minus_12 = thursday - timedelta(weeks=12) # 12周前
+
+    return {
+        "friday_before": friday_before.strftime("%Y-%m-%d"),
+        "thursday": thursday.strftime("%Y-%m-%d"),
+        "t_minus_1": t_minus_1.strftime("%Y-%m-%d"),
+        "t_minus_2": t_minus_2.strftime("%Y-%m-%d"),
+        "t_minus_4": t_minus_4.strftime("%Y-%m-%d"),
+        "t_minus_12": t_minus_12.strftime("%Y-%m-%d"),
+    }
 
 
 def fetch_etf_name_map() -> dict:
@@ -75,54 +96,147 @@ def fetch_etf_name_map() -> dict:
     return name_map
 
 
-def fetch_one_etf_weekly(code: str, monday: str, friday: str):
-    """净值算周涨幅：(周五单位净值 / 周一单位净值 - 1) × 100。
+def fetch_one_nav(code: str, date_str: str) -> Optional[float]:
+    """获取某只ETF在某日的单位净值。
 
-    接口: api.fund.eastmoney.com/f10/lsjz
-    返回每日单位净值，自己算日涨跌和周涨幅。
+    如果当天非交易日，取最近一个不晚于该日的交易日净值。
+    date_str 格式: YYYY-MM-DD
     """
     try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d")
+        # API 使用 YYYYMMDD 格式
+        start_date = (target_date - timedelta(days=10)).strftime("%Y%m%d")
+        end_date = target_date.strftime("%Y%m%d")
+
         df = ak.fund_etf_fund_info_em(
             fund=code,
-            start_date=monday,
-            end_date=friday,
+            start_date=start_date,
+            end_date=end_date,
         )
-        if len(df) < 2:
+        if len(df) == 0:
             return None
 
-        mon_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{monday[:4]}-{monday[4:6]}-{monday[6:]}")]
-        fri_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{friday[:4]}-{friday[4:6]}-{friday[6:]}")]
-
-        if len(mon_rows) > 0 and len(fri_rows) > 0:
-            mon_nav = float(mon_rows.iloc[0]["单位净值"])
-            fri_nav = float(fri_rows.iloc[0]["单位净值"])
-        else:
-            mon_nav = float(df.iloc[0]["单位净值"])
-            fri_nav = float(df.iloc[-1]["单位净值"])
-
-        if mon_nav == 0 or fri_nav == 0:
+        # 取最接近 target_date 且不晚于它的净值记录
+        target_ts = pd.Timestamp(target_date.strftime("%Y-%m-%d"))
+        df["净值日期"] = pd.to_datetime(df["净值日期"])
+        valid = df[df["净值日期"] <= target_ts]
+        if len(valid) == 0:
             return None
-        ret = (fri_nav / mon_nav - 1) * 100
-        # NaN guard: invalid division or API returning non-finite values
-        if ret != ret or ret == float("inf") or ret == float("-inf"):
-            return None
-        return round(ret, 2)
+
+        nav = float(valid.iloc[-1]["单位净值"])
+        return nav
     except Exception:
         return None
 
 
-def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
-    """获取所有 ETF 的周涨幅。"""
+def fetch_one_etf_momentum(code: str, dates: dict) -> Optional[dict]:
+    """获取一只ETF的周涨幅和动量得分。
+
+    Args:
+        code: ETF代码
+        dates: get_momentum_dates() 返回的日期 dict (所有值均为 YYYY-MM-DD 格式)
+
+    Returns:
+        None 或 {"weeklyReturn": float, "momentumScore": float, "returns": dict}
+    """
+    try:
+        # 取各时间点净值
+        t0 = fetch_one_nav(code, dates["thursday"])
+        time.sleep(0.1)
+        t_m1 = fetch_one_nav(code, dates["t_minus_1"])
+        time.sleep(0.1)
+        t_m2 = fetch_one_nav(code, dates["t_minus_2"])
+        time.sleep(0.1)
+        t_m4 = fetch_one_nav(code, dates["t_minus_4"])
+        time.sleep(0.1)
+        t_m12 = fetch_one_nav(code, dates["t_minus_12"])
+        time.sleep(0.1)
+        fri_nav = fetch_one_nav(code, dates["friday_before"])
+
+        # 阶段一：周涨幅 = (周四净值 / 上周五净值 - 1) × 100
+        if t0 is None or fri_nav is None or fri_nav == 0:
+            weekly_return = None
+        else:
+            weekly_return = round((t0 / fri_nav - 1) * 100, 2)
+            # NaN guard
+            if math.isnan(weekly_return) or math.isinf(weekly_return):
+                weekly_return = None
+
+        # 阶段二：动量得分
+        momentum = _calc_momentum_score(t0, t_m1, t_m2, t_m4, t_m12)
+
+        if weekly_return is None and momentum is None:
+            return None
+
+        return {
+            "weeklyReturn": weekly_return,
+            "momentumScore": momentum["score"] if momentum else None,
+            "returns": momentum["returns"] if momentum else None,
+        }
+    except Exception:
+        return None
+
+
+def _calc_momentum_score(t0: Optional[float], t_m1: Optional[float],
+                         t_m2: Optional[float], t_m4: Optional[float],
+                         t_m12: Optional[float]) -> Optional[dict]:
+    """计算动量得分。
+
+    加权公式: 1周×40% + 2周×30% + 4周×20% + 12周×10%
+    缺失周期按比例重新分配权重。
+    可用周期 < 2 则返回 None。
+
+    Returns:
+        None 或 {"score": float, "returns": {"1w": float|None, ...}}
+    """
+    if t0 is None or t0 == 0:
+        return None
+
+    periods = [
+        ("1w", t_m1, 0.4),
+        ("2w", t_m2, 0.3),
+        ("4w", t_m4, 0.2),
+        ("12w", t_m12, 0.1),
+    ]
+
+    returns: dict[str, Optional[float]] = {}
+    available_weight = 0.0
+    weighted_sum = 0.0
+
+    for label, nav, weight in periods:
+        if nav is not None and nav > 0:
+            r = (t0 / nav - 1) * 100
+            # NaN guard
+            if not math.isnan(r) and not math.isinf(r):
+                returns[label] = round(r, 2)
+                weighted_sum += r * weight
+                available_weight += weight
+            else:
+                returns[label] = None
+        else:
+            returns[label] = None
+
+    # 可用周期 < 2，不参与动量评分
+    available_count = sum(1 for v in returns.values() if v is not None)
+    if available_count < 2 or available_weight == 0:
+        return None
+
+    # 按比例重新分配权重
+    score = round(weighted_sum / available_weight, 2)
+
+    return {"score": score, "returns": returns}
+
+
+def fetch_all_momentum(codes: list, dates: dict) -> dict:
+    """获取所有 ETF 的周涨幅和动量得分。"""
     total = len(codes)
     results = {}
     failed = 0
 
-    print(f"📡 正在获取 {total} 只 ETF 的净值周涨幅...")
+    print(f"📡 正在获取 {total} 只 ETF 的净值数据（周涨幅 + 动量得分）...")
 
     for i, code in enumerate(codes):
-        ret = fetch_one_etf_weekly(code, monday, friday)
+        ret = fetch_one_etf_momentum(code, dates)
         if ret is not None:
             results[code] = ret
         else:
@@ -138,30 +252,49 @@ def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
     return results
 
 
-def build_result(config: dict, name_map: dict, weekly: dict, week_range: str) -> dict:
-    """构建输出 JSON。"""
+def build_result(config: dict, name_map: dict, momentum_data: dict, week_range: str) -> dict:
+    """构建输出 JSON，包含主题排名和动量总榜。"""
     themes_result = []
+    all_funds = []  # 跨主题动量总榜
+
     for theme in config["themes"]:
         funds = []
         for code in theme["funds"]:
-            if code in weekly:
-                funds.append({
+            if code in momentum_data:
+                md = momentum_data[code]
+                entry = {
                     "code": code,
                     "name": name_map.get(code, code),
-                    "weeklyReturn": weekly[code],
+                    "weeklyReturn": md["weeklyReturn"],
+                    "momentumScore": md["momentumScore"],
+                    "returns": md.get("returns"),
                     "type": "",
-                })
+                }
+                funds.append(entry)
+                # 只有有动量得分的才进入总榜
+                if md["momentumScore"] is not None:
+                    all_funds.append({
+                        "code": code,
+                        "name": name_map.get(code, code),
+                        "theme": theme["name"],
+                        "momentumScore": md["momentumScore"],
+                    })
+
         # 按周涨幅降序
-        funds.sort(key=lambda x: x["weeklyReturn"], reverse=True)
+        funds.sort(key=lambda x: x["weeklyReturn"] if x["weeklyReturn"] is not None else float("-inf"), reverse=True)
         themes_result.append({
             "name": theme["name"],
             "funds": funds[:config["topN"]],
         })
 
+    # 动量总榜按 momentumScore 降序
+    all_funds.sort(key=lambda x: x["momentumScore"], reverse=True)
+
     return {
         "week": week_range,
         "updatedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "themes": themes_result,
+        "momentumRanking": all_funds[:20],  # 总榜取前20
     }
 
 
@@ -242,9 +375,18 @@ def print_summary(result: dict):
             continue
         medals = ["🥇", "🥈", "🥉"]
         for i, fund in enumerate(theme["funds"]):
+            if fund["weeklyReturn"] is None:
+                continue
             prefix = medals[i] if i < 3 else f"  {i+1}."
             sign = "+" if fund["weeklyReturn"] >= 0 else ""
             print(f"   {prefix} {fund['code']} {fund['name']:<16s} {sign}{fund['weeklyReturn']:.2f}%")
+    # 动量总榜 Top5
+    if result.get("momentumRanking"):
+        print(f"\n🚀 动量总榜 Top5（跨主题）")
+        print(f"   {'─'*40}")
+        for i, fund in enumerate(result["momentumRanking"][:5]):
+            theme_tag = f"[{fund['theme']}]"
+            print(f"   {i+1}. {fund['code']} {fund['name']:<14s} {theme_tag:<12s} 动量: {fund['momentumScore']:.2f}")
     print(f"\n{'='*50}")
 
 
@@ -256,11 +398,11 @@ def print_summary(result: dict):
 def cmd_update():
     """主命令：更新周涨幅数据。"""
     config = load_config()
-    week_range = get_week_range()
-    last_monday, last_friday = get_trading_dates()
+    dates = get_momentum_dates()
+    week_range = get_week_range(dates["friday_before"], dates["thursday"])
 
     print(f"📅 计算周期: {week_range}")
-    print(f"   交易日: {last_monday}(周一) ~ {last_friday}(周五)")
+    print(f"   交易日: {dates['friday_before']}(周五) ~ {dates['thursday']}(周四)")
 
     # 1. 收集所有 ETF 代码（去重）
     all_codes = list(dict.fromkeys(
@@ -271,15 +413,11 @@ def cmd_update():
     # 2. 获取 ETF 名称映射
     name_map = fetch_etf_name_map()
 
-    # 3. 获取净值周涨幅
-    weekly = fetch_all_weekly(
-        all_codes,
-        last_monday.strftime("%Y%m%d"),
-        last_friday.strftime("%Y%m%d"),
-    )
+    # 3. 获取净值数据（周涨幅 + 动量得分）
+    momentum_data = fetch_all_momentum(all_codes, dates)
 
     # 4. 构建结果
-    result = build_result(config, name_map, weekly, week_range)
+    result = build_result(config, name_map, momentum_data, week_range)
     save_data(result)
     print_summary(result)
 
