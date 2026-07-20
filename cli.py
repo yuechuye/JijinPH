@@ -94,42 +94,130 @@ def fetch_etf_name_map() -> dict:
     return name_map
 
 
-def fetch_one_etf_weekly(code: str, monday: str, friday: str):
-    """净值算周涨幅：(周五单位净值 / 周一单位净值 - 1) × 100。
+def fetch_one_nav(code: str, date_str: str) -> float | None:
+    """获取某只ETF在某日的单位净值。
 
-    接口: api.fund.eastmoney.com/f10/lsjz
-    返回每日单位净值，自己算日涨跌和周涨幅。
+    如果当天非交易日，取最近一个不晚于该日的交易日净值。
+    date_str 格式: YYYY-MM-DD
     """
     try:
+        target_date = datetime.strptime(date_str, "%Y-%m-%d")
+        # API 使用 YYYYMMDD 格式
+        start_date = (target_date - timedelta(days=5)).strftime("%Y%m%d")
+        end_date = target_date.strftime("%Y%m%d")
+
         df = ak.fund_etf_fund_info_em(
             fund=code,
-            start_date=monday,
-            end_date=friday,
+            start_date=start_date,
+            end_date=end_date,
         )
-        if len(df) < 2:
+        if len(df) == 0:
             return None
 
-        mon_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{monday[:4]}-{monday[4:6]}-{monday[6:]}")]
-        fri_rows = df[df["净值日期"] == pd.Timestamp(
-            f"{friday[:4]}-{friday[4:6]}-{friday[6:]}")]
-
-        if len(mon_rows) > 0 and len(fri_rows) > 0:
-            mon_nav = float(mon_rows.iloc[0]["单位净值"])
-            fri_nav = float(fri_rows.iloc[0]["单位净值"])
-        else:
-            mon_nav = float(df.iloc[0]["单位净值"])
-            fri_nav = float(df.iloc[-1]["单位净值"])
-
-        if mon_nav == 0 or fri_nav == 0:
+        # 取最接近 target_date 且不晚于它的净值记录
+        target_ts = pd.Timestamp(target_date.strftime("%Y-%m-%d"))
+        df["净值日期"] = pd.to_datetime(df["净值日期"])
+        valid = df[df["净值日期"] <= target_ts]
+        if len(valid) == 0:
             return None
-        ret = (fri_nav / mon_nav - 1) * 100
-        # NaN guard: invalid division or API returning non-finite values
-        if ret != ret or ret == float("inf") or ret == float("-inf"):
-            return None
-        return round(ret, 2)
+
+        nav = float(valid.iloc[-1]["单位净值"])
+        return nav
     except Exception:
         return None
+
+
+def fetch_one_etf_momentum(code: str, dates: dict) -> dict | None:
+    """获取一只ETF的周涨幅和动量得分。
+
+    Args:
+        code: ETF代码
+        dates: get_momentum_dates() 返回的日期 dict (所有值均为 YYYY-MM-DD 格式)
+
+    Returns:
+        None 或 {"weeklyReturn": float, "momentumScore": float, "returns": dict}
+    """
+    try:
+        # 取各时间点净值
+        t0 = fetch_one_nav(code, dates["thursday"])
+        t_m1 = fetch_one_nav(code, dates["t_minus_1"])
+        t_m2 = fetch_one_nav(code, dates["t_minus_2"])
+        t_m4 = fetch_one_nav(code, dates["t_minus_4"])
+        t_m12 = fetch_one_nav(code, dates["t_minus_12"])
+        fri_nav = fetch_one_nav(code, dates["friday_before"])
+
+        # 阶段一：周涨幅 = (周四净值 / 上周五净值 - 1) × 100
+        if t0 is None or fri_nav is None or fri_nav == 0:
+            weekly_return = None
+        else:
+            weekly_return = round((t0 / fri_nav - 1) * 100, 2)
+            # NaN guard
+            if weekly_return != weekly_return or abs(weekly_return) == float("inf"):
+                weekly_return = None
+
+        # 阶段二：动量得分
+        momentum = _calc_momentum_score(code, t0, t_m1, t_m2, t_m4, t_m12)
+
+        if weekly_return is None and momentum is None:
+            return None
+
+        return {
+            "weeklyReturn": weekly_return,
+            "momentumScore": momentum["score"] if momentum else None,
+            "returns": momentum["returns"] if momentum else None,
+        }
+    except Exception:
+        return None
+
+
+def _calc_momentum_score(code: str, t0: float | None, t_m1: float | None,
+                         t_m2: float | None, t_m4: float | None,
+                         t_m12: float | None) -> dict | None:
+    """计算动量得分。
+
+    加权公式: 1周×40% + 2周×30% + 4周×20% + 12周×10%
+    缺失周期按比例重新分配权重。
+    可用周期 < 2 则返回 None。
+
+    Returns:
+        None 或 {"score": float, "returns": {"1w": float|None, ...}}
+    """
+    if t0 is None or t0 == 0:
+        return None
+
+    periods = [
+        ("1w", t_m1, 0.4),
+        ("2w", t_m2, 0.3),
+        ("4w", t_m4, 0.2),
+        ("12w", t_m12, 0.1),
+    ]
+
+    returns: dict[str, float | None] = {}
+    available_weight = 0.0
+    weighted_sum = 0.0
+
+    for label, nav, weight in periods:
+        if nav is not None and nav > 0:
+            r = (t0 / nav - 1) * 100
+            # NaN guard
+            if r == r and abs(r) != float("inf"):
+                returns[label] = round(r, 2)
+                weighted_sum += r * weight
+                available_weight += weight
+            else:
+                returns[label] = None
+        else:
+            returns[label] = None
+
+    # 可用周期 < 2，不参与动量评分
+    available_count = sum(1 for v in returns.values() if v is not None)
+    if available_count < 2 or available_weight == 0:
+        return None
+
+    # 按比例重新分配权重
+    score = round(weighted_sum / available_weight, 2)
+
+    return {"score": score, "returns": returns}
 
 
 def fetch_all_weekly(codes: list, monday: str, friday: str) -> dict:
